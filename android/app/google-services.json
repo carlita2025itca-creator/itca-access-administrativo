@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "471781159185",
+    "project_id": "itca-access",
+    "storage_bucket": "itca-access.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:471781159185:android:b99c814416ec53f9299cb0",
+        "android_client_info": {
+          "package_name": "com.example.panel_admin_itca"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5YkafnuyYLEwBqgxDB0sAzogTNDZk1d4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
