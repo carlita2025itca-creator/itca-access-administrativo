@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-// 👇 Importamos Supabase
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert'; // ✨ Para manejar los textos a encriptar
+import 'package:crypto/crypto.dart'; // ✨ El motor de encriptación SHA-256
 import 'package:panel_admin_itca/web/screens/home_admin.dart';
 
 class LoginAdmin extends StatefulWidget {
@@ -12,12 +13,15 @@ class LoginAdmin extends StatefulWidget {
 
 class _LoginAdminState extends State<LoginAdmin> {
   // Variables para la interfaz
+
   bool _obscureText = true;
   bool _estaCargando = false;
 
   // Controladores para capturar los datos
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  final supabase = Supabase.instance.client;
 
   @override
   void dispose() {
@@ -26,10 +30,12 @@ class _LoginAdminState extends State<LoginAdmin> {
     super.dispose();
   }
 
-  // ================= LÓGICA DE INICIO DE SESIÓN CON SUPABASE =================
+  // ================= LÓGICA DE INICIO DE SESIÓN PROPIA =================
   Future<void> _iniciarSesion() async {
-    if (_emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
+    final correoIngresado = _emailController.text.trim().toLowerCase();
+    final passwordIngresada = _passwordController.text.trim();
+
+    if (correoIngresado.isEmpty || passwordIngresada.isEmpty) {
       _mostrarMensaje(
         '⚠️ Por favor ingresa correo y contraseña',
         Colors.orange,
@@ -40,32 +46,62 @@ class _LoginAdminState extends State<LoginAdmin> {
     setState(() => _estaCargando = true);
 
     try {
-      final AuthResponse res = await Supabase.instance.client.auth
-          .signInWithPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+      // 1. ENCRIPTAMOS LA CONTRASEÑA ESCRITA
+      var bytes = utf8.encode(passwordIngresada);
+      String passwordEncriptada = sha256.convert(bytes).toString();
 
-      if (res.user != null) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeAdmin()),
-          );
-        }
+      // 2. BUSCAMOS AL USUARIO EN NUESTRA TABLA
+      final usuarioData = await supabase
+          .from('usuarios')
+          .select('email, password, rol')
+          .eq('email', correoIngresado)
+          .maybeSingle();
+
+      // ✨ 3. VALIDAMOS EXISTENCIA (Mensaje Sutil)
+      if (usuarioData == null) {
+        _mostrarMensaje('❌ Correo o contraseña incorrectos.', Colors.red);
+        setState(() => _estaCargando = false);
+        return;
       }
-    } on AuthException catch (e) {
-      String mensaje = 'Error al ingresar';
-      if (e.message.contains('Invalid login credentials')) {
-        mensaje = '❌ Correo o contraseña incorrectos.';
-      } else if (e.message.contains('Email not confirmed')) {
-        mensaje = '❌ Debes confirmar tu correo electrónico para ingresar.';
-      } else {
-        mensaje = '❌ ${e.message}';
+
+      String passwordEnBaseDeDatos = usuarioData['password'] ?? '';
+
+      // ✨ 4. VALIDAMOS CONTRASEÑA (Mensaje Sutil)
+      if (passwordEnBaseDeDatos != passwordEncriptada &&
+          passwordEnBaseDeDatos != passwordIngresada) {
+        _mostrarMensaje('❌ Correo o contraseña incorrectos.', Colors.red);
+        setState(() => _estaCargando = false);
+        return;
       }
-      _mostrarMensaje(mensaje, Colors.red);
+
+      // 5. VALIDACIÓN DE PERMISOS (Solo Admins)
+      final String rol = usuarioData['rol'] ?? 'usuario';
+      if (rol != 'superadmin' && rol != 'administrador') {
+        _mostrarMensaje(
+          '⛔ No tienes permisos para acceder al Panel Web.',
+          Colors.red.shade800,
+        );
+        setState(() => _estaCargando = false);
+        return;
+      }
+
+      // 6. ¡ACCESO CONCEDIDO!
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            // 1. Quitamos 'const' porque el correo es una variable dinámica
+            // 2. Pasamos el 'correoIngresado' al parámetro emailUsuario
+            builder: (context) => HomeAdmin(emailUsuario: correoIngresado),
+          ),
+        );
+      }
     } catch (e) {
-      _mostrarMensaje('❌ Error de conexión: $e', Colors.red);
+      debugPrint('Error en login: $e');
+      _mostrarMensaje(
+        '❌ Error técnico al conectar con el servidor.',
+        Colors.red,
+      );
     } finally {
       if (mounted) setState(() => _estaCargando = false);
     }
@@ -75,7 +111,10 @@ class _LoginAdminState extends State<LoginAdmin> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(texto),
+        content: Text(
+          texto,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
       ),
@@ -107,9 +146,7 @@ class _LoginAdminState extends State<LoginAdmin> {
                 Icon(
                   Icons.admin_panel_settings_rounded,
                   size: 80,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary, // Toma el azul del main global
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 15),
                 Text(
@@ -117,9 +154,7 @@ class _LoginAdminState extends State<LoginAdmin> {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary, // Toma el azul del main global
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
                 const Text(
@@ -134,7 +169,6 @@ class _LoginAdminState extends State<LoginAdmin> {
                   decoration: const InputDecoration(
                     labelText: 'Correo Electrónico',
                     prefixIcon: Icon(Icons.email_outlined),
-                    // Los bordes y colores ahora se controlan desde el main.dart
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -168,7 +202,7 @@ class _LoginAdminState extends State<LoginAdmin> {
                 ),
                 const SizedBox(height: 30),
 
-                // Botón de Ingresar súper limpio (El estilo viene del main.dart)
+                // Botón de Ingresar
                 SizedBox(
                   width: double.infinity,
                   height: 50,

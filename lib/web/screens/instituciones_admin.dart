@@ -12,27 +12,49 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
   // ================= CLIENTE SUPABASE =================
   final supabase = Supabase.instance.client;
 
-  // ================= CONTROLADORES =================
+  // ================= CONTROLADORES Y ESTADO =================
   final TextEditingController _buscadorController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _rucController = TextEditingController();
   final TextEditingController _paisController = TextEditingController(
     text: 'Ecuador',
-  );
-  final TextEditingController _provinciaController = TextEditingController(
-    text: 'Imbabura',
-  );
-  final TextEditingController _ciudadController = TextEditingController(
-    text: 'Ibarra',
   );
   final TextEditingController _direccionController = TextEditingController();
   final TextEditingController _pisosController = TextEditingController();
   final TextEditingController _subsuelosController = TextEditingController();
   final TextEditingController _contactoController = TextEditingController();
   final TextEditingController _telefonoController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
 
+  String? _provinciaSeleccionada = 'Imbabura';
+  String? _ciudadSeleccionada = 'Ibarra';
   String _filtroBusqueda = "";
+
+  final Map<String, List<String>> _ubicacionesEcuador = {
+    'Imbabura': [
+      'Ibarra',
+      'Otavalo',
+      'Cotacachi',
+      'Antonio Ante',
+      'Urcuquí',
+      'Pimampiro',
+    ],
+    'Pichincha': ['Quito', 'Machachi', 'Cayambe', 'Sangolquí', 'Pedro Moncayo'],
+    'Guayas': ['Guayaquil', 'Durán', 'Samborondón', 'Daule', 'Milagro'],
+    'Azuay': ['Cuenca', 'Gualaceo', 'Paute', 'Sigsig'],
+    'Carchi': [
+      'Tulcán',
+      'Montúfar',
+      'Espejo',
+      'Mira',
+      'Bolívar',
+      'San Pedro de Huaca',
+    ],
+    'Tungurahua': ['Ambato', 'Baños', 'Pelileo', 'Píllaro'],
+    'Manabí': ['Portoviejo', 'Manta', 'Chone', 'Bahía de Caráquez'],
+  };
 
   @override
   void initState() {
@@ -48,27 +70,29 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
   void dispose() {
     _buscadorController.dispose();
     _nombreController.dispose();
+    _rucController.dispose();
     _paisController.dispose();
-    _provinciaController.dispose();
-    _ciudadController.dispose();
     _direccionController.dispose();
     _pisosController.dispose();
     _subsuelosController.dispose();
     _contactoController.dispose();
     _telefonoController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
   void _limpiarFormulario() {
     _nombreController.clear();
+    _rucController.clear();
     _paisController.text = 'Ecuador';
-    _provinciaController.text = 'Imbabura';
-    _ciudadController.text = 'Ibarra';
     _direccionController.clear();
     _pisosController.clear();
     _subsuelosController.clear();
     _contactoController.clear();
     _telefonoController.clear();
+    _emailController.clear();
+    _provinciaSeleccionada = 'Imbabura';
+    _ciudadSeleccionada = 'Ibarra';
   }
 
   // ================= MODALES (NUEVO Y EDITAR) =================
@@ -82,14 +106,29 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
     Map<String, dynamic> datosActuales,
   ) {
     _nombreController.text = datosActuales['nombre'] ?? '';
+    _rucController.text = datosActuales['ruc'] ?? '';
     _paisController.text = datosActuales['pais'] ?? 'Ecuador';
-    _provinciaController.text = datosActuales['provincia'] ?? 'Imbabura';
-    _ciudadController.text = datosActuales['ciudad'] ?? 'Ibarra';
     _direccionController.text = datosActuales['direccion'] ?? '';
     _pisosController.text = (datosActuales['pisos'] ?? '').toString();
     _subsuelosController.text = (datosActuales['subsuelos'] ?? '').toString();
     _contactoController.text = datosActuales['contacto'] ?? '';
     _telefonoController.text = datosActuales['telefono'] ?? '';
+    _emailController.text = datosActuales['email'] ?? '';
+
+    String provBD = datosActuales['provincia'] ?? 'Imbabura';
+    String ciuBD = datosActuales['ciudad'] ?? 'Ibarra';
+
+    if (_ubicacionesEcuador.containsKey(provBD)) {
+      _provinciaSeleccionada = provBD;
+      if (_ubicacionesEcuador[provBD]!.contains(ciuBD)) {
+        _ciudadSeleccionada = ciuBD;
+      } else {
+        _ciudadSeleccionada = _ubicacionesEcuador[provBD]!.first;
+      }
+    } else {
+      _provinciaSeleccionada = 'Imbabura';
+      _ciudadSeleccionada = 'Ibarra';
+    }
 
     _mostrarModalFormulario(context, esEdicion: true, idDocumento: idDocumento);
   }
@@ -100,7 +139,6 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
     String? idDocumento,
   }) {
     bool guardando = false;
-
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -123,21 +161,34 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
               ),
               content: SingleChildScrollView(
                 child: SizedBox(
-                  width:
-                      600, // Más ancho para que quepan las 3 columnas de ubicación
+                  width: 600,
                   child: Form(
                     key: _formKey,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _campoTexto(
-                          _nombreController,
-                          'Nombre de Institución',
-                          Icons.business,
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: _campoTexto(
+                                _nombreController,
+                                'Nombre de Institución',
+                                Icons.business,
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              flex: 1,
+                              child: _campoTexto(
+                                _rucController,
+                                'RUC',
+                                Icons.assignment_ind,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 15),
-
-                        // Fila con País, Provincia y Ciudad
                         Row(
                           children: [
                             Expanded(
@@ -149,31 +200,63 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: _campoTexto(
-                                _provinciaController,
-                                'Provincia',
-                                Icons.map,
+                              child: DropdownButtonFormField<String>(
+                                value: _provinciaSeleccionada,
+                                decoration: const InputDecoration(
+                                  labelText: 'Provincia',
+                                  prefixIcon: Icon(Icons.map),
+                                ),
+                                items: _ubicacionesEcuador.keys
+                                    .map(
+                                      (String p) => DropdownMenuItem(
+                                        value: p,
+                                        child: Text(p),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setStateDialog(() {
+                                      _provinciaSeleccionada = val;
+                                      _ciudadSeleccionada =
+                                          _ubicacionesEcuador[val]!.first;
+                                    });
+                                  }
+                                },
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: _campoTexto(
-                                _ciudadController,
-                                'Ciudad',
-                                Icons.location_city,
+                              child: DropdownButtonFormField<String>(
+                                value: _ciudadSeleccionada,
+                                decoration: const InputDecoration(
+                                  labelText: 'Ciudad',
+                                  prefixIcon: Icon(Icons.location_city),
+                                ),
+                                items: _provinciaSeleccionada != null
+                                    ? _ubicacionesEcuador[_provinciaSeleccionada]!
+                                          .map(
+                                            (String c) => DropdownMenuItem(
+                                              value: c,
+                                              child: Text(c),
+                                            ),
+                                          )
+                                          .toList()
+                                    : [],
+                                onChanged: (val) => setStateDialog(
+                                  () => _ciudadSeleccionada = val,
+                                ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 15),
-
                         _campoTexto(
                           _direccionController,
                           'Dirección Exacta',
                           Icons.signpost,
                         ),
                         const SizedBox(height: 15),
-
                         Row(
                           children: [
                             Expanded(
@@ -194,7 +277,6 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                           ],
                         ),
                         const SizedBox(height: 15),
-
                         Row(
                           children: [
                             Expanded(
@@ -213,6 +295,12 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 15),
+                        _campoTexto(
+                          _emailController,
+                          'Correo Electrónico',
+                          Icons.email,
                         ),
                       ],
                     ),
@@ -238,12 +326,12 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                       : () async {
                           if (_formKey.currentState!.validate()) {
                             setStateDialog(() => guardando = true);
-
                             final datos = {
                               'nombre': _nombreController.text.trim(),
+                              'ruc': _rucController.text.trim(),
                               'pais': _paisController.text.trim(),
-                              'provincia': _provinciaController.text.trim(),
-                              'ciudad': _ciudadController.text.trim(),
+                              'provincia': _provinciaSeleccionada,
+                              'ciudad': _ciudadSeleccionada,
                               'direccion': _direccionController.text.trim(),
                               'pisos':
                                   int.tryParse(_pisosController.text.trim()) ??
@@ -255,8 +343,8 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                                   0,
                               'contacto': _contactoController.text.trim(),
                               'telefono': _telefonoController.text.trim(),
+                              'email': _emailController.text.trim(),
                             };
-
                             try {
                               if (esEdicion && idDocumento != null) {
                                 await supabase
@@ -268,15 +356,12 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                                     .from('instituciones')
                                     .insert(datos);
                               }
-
                               if (mounted) {
                                 Navigator.pop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      esEdicion
-                                          ? '✅ Actualizada correctamente'
-                                          : '✅ Creada correctamente',
+                                      esEdicion ? '✅ Actualizada' : '✅ Creada',
                                     ),
                                     backgroundColor: esEdicion
                                         ? Colors.blue
@@ -286,15 +371,13 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                               }
                               _limpiarFormulario();
                             } catch (e) {
-                              debugPrint("Error de Supabase: $e");
-                              if (mounted) {
+                              if (mounted)
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('❌ Error al procesar datos'),
+                                    content: Text('❌ Error'),
                                     backgroundColor: Colors.red,
                                   ),
                                 );
-                              }
                             } finally {
                               setStateDialog(() => guardando = false);
                             }
@@ -352,23 +435,21 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                       .from('instituciones')
                       .delete()
                       .eq('id', idDocumento);
-                  if (mounted) {
+                  if (mounted)
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('✅ $nombre eliminada'),
                         backgroundColor: Colors.green,
                       ),
                     );
-                  }
                 } catch (e) {
-                  if (mounted) {
+                  if (mounted)
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('❌ Error al eliminar'),
                         backgroundColor: Colors.red,
                       ),
                     );
-                  }
                 }
               },
               child: const Text('Sí, Eliminar'),
@@ -406,11 +487,220 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
     );
   }
 
+  // ✨ ================= NUEVO: VENTANA FLOTANTE DE DETALLES ================= ✨
+  void _mostrarDetalles(Map<String, dynamic> datos) {
+    String fechaRaw = datos['fecha_registro'] ?? '';
+    String fechaCorta = fechaRaw.length > 10
+        ? fechaRaw.substring(0, 10)
+        : 'Desconocida';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            width: 450, // Ancho adecuado para web y móvil
+            constraints: const BoxConstraints(
+              maxHeight: 600,
+            ), // Evita que crezca demasiado
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Cabecera colorida
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.1),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        radius: 25,
+                        child: const Icon(Icons.business, size: 28),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              datos['nombre'] ?? 'Sin Nombre',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'RUC: ${datos['ruc'] ?? 'N/A'}',
+                              style: TextStyle(color: Colors.grey.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Cuerpo desplazable
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(25),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _seccionDetalle(
+                          Icons.calendar_today,
+                          'Fecha de Registro',
+                          fechaCorta,
+                        ),
+                        const Divider(height: 30),
+
+                        const Text(
+                          '📍 Ubicación',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        _seccionDetalle(
+                          Icons.public,
+                          'País',
+                          datos['pais'] ?? 'Ecuador',
+                        ),
+                        _seccionDetalle(
+                          Icons.map,
+                          'Provincia',
+                          datos['provincia'] ?? 'N/A',
+                        ),
+                        _seccionDetalle(
+                          Icons.location_city,
+                          'Ciudad',
+                          datos['ciudad'] ?? 'N/A',
+                        ),
+                        _seccionDetalle(
+                          Icons.signpost,
+                          'Dirección',
+                          datos['direccion'] ?? 'No especificada',
+                        ),
+                        const Divider(height: 30),
+
+                        const Text(
+                          '🏢 Edificio',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _seccionDetalle(
+                                Icons.stairs,
+                                'Pisos',
+                                '${datos['pisos'] ?? 0}',
+                              ),
+                            ),
+                            Expanded(
+                              child: _seccionDetalle(
+                                Icons.arrow_downward,
+                                'Subsuelos',
+                                '${datos['subsuelos'] ?? 0}',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 30),
+
+                        const Text(
+                          '📞 Contacto',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+                        _seccionDetalle(
+                          Icons.person,
+                          'Responsable',
+                          datos['contacto'] ?? 'N/A',
+                        ),
+                        _seccionDetalle(
+                          Icons.phone,
+                          'Teléfono',
+                          datos['telefono'] ?? 'N/A',
+                        ),
+                        _seccionDetalle(
+                          Icons.email,
+                          'Correo Electrónico',
+                          datos['email'] ?? 'N/A',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _seccionDetalle(IconData icono, String titulo, String valor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icono, size: 20, color: Colors.grey.shade600),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  titulo,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                Text(
+                  valor,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ================= DISEÑO PRINCIPAL (UI) =================
   @override
   Widget build(BuildContext context) {
     double anchoPantalla = MediaQuery.of(context).size.width;
-    bool esPantallaPequena = anchoPantalla < 800;
+    bool esPantallaPequena = anchoPantalla < 900;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,7 +722,7 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                   ),
                   const SizedBox(height: 5),
                   const Text(
-                    'Gestiona los lugares donde se instalarán los Beacons.',
+                    'Gestiona la información de todas las instituciones.',
                     style: TextStyle(color: Colors.grey, fontSize: 16),
                   ),
                 ],
@@ -465,7 +755,7 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
         ),
         const SizedBox(height: 20),
 
-        // 3. TABLA DE DATOS (SUPABASE REALTIME)
+        // 3. TABLA EXPANDIDA Y CENTRADA ✨
         Expanded(
           child: Card(
             elevation: 2,
@@ -474,171 +764,281 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(15),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  child: StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: supabase
-                        .from('instituciones')
-                        .stream(primaryKey: ['id'])
-                        .order('fecha_registro', ascending: false),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Padding(
-                          padding: EdgeInsets.all(50.0),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        return Padding(
-                          padding: const EdgeInsets.all(50.0),
-                          child: Center(
-                            child: Text(
-                              'Error al cargar datos: ${snapshot.error}',
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        );
-                      }
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.all(50.0),
-                          child: Center(
-                            child: Text(
-                              'No hay instituciones registradas',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 18,
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: supabase
+                    .from('instituciones')
+                    .stream(primaryKey: ['id'])
+                    .order('fecha_registro', ascending: false),
+                builder: (context, snapshotInst) {
+                  if (snapshotInst.connectionState == ConnectionState.waiting)
+                    return const Center(child: CircularProgressIndicator());
+                  if (snapshotInst.hasError)
+                    return Center(
+                      child: Text(
+                        'Error: ${snapshotInst.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    );
+                  if (!snapshotInst.hasData || snapshotInst.data!.isEmpty)
+                    return const Center(
+                      child: Text(
+                        'No hay instituciones',
+                        style: TextStyle(color: Colors.grey, fontSize: 18),
+                      ),
+                    );
+
+                  var documentos = snapshotInst.data!.where((datos) {
+                    String nombre = (datos['nombre'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    String ruc = (datos['ruc'] ?? '').toString().toLowerCase();
+                    return nombre.contains(_filtroBusqueda) ||
+                        ruc.contains(_filtroBusqueda);
+                  }).toList();
+
+                  // ✨ NUEVO: ESCUCHAMOS TAMBIÉN LA TABLA DE BEACONS EN TIEMPO REAL
+                  return StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: supabase.from('beacons').stream(primaryKey: ['id']),
+                    builder: (context, snapshotBeacons) {
+                      // Si no han cargado los beacons, usamos una lista vacía para no bloquear la pantalla
+                      final todosLosBeacons = snapshotBeacons.data ?? [];
+
+                      return Container(
+                        width: double.infinity,
+                        color: Colors.white,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth: constraints.maxWidth,
+                                ),
+                                child: DataTable(
+                                  headingRowColor:
+                                      WidgetStateProperty.resolveWith(
+                                        (states) => Colors.blue.shade50,
+                                      ),
+                                  columnSpacing: 30,
+                                  horizontalMargin: 30,
+                                  columns: const [
+                                    DataColumn(
+                                      label: Text(
+                                        '#',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'Nombre de Institución',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'RUC',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'Ubicación',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    // ✨ NUEVA COLUMNA DE BEACONS
+                                    DataColumn(
+                                      label: Text(
+                                        'Beacons',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'Acciones',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  rows: List.generate(documentos.length, (
+                                    index,
+                                  ) {
+                                    var datos = documentos[index];
+                                    String idInstitucion = datos['id']
+                                        .toString();
+                                    String ubicacionCompleta =
+                                        "${datos['ciudad'] ?? ''}, ${datos['provincia'] ?? ''}";
+
+                                    // ✨ MATEMÁTICA: Filtramos y contamos los beacons de esta institución
+                                    int cantidadBeacons = todosLosBeacons
+                                        .where(
+                                          (b) =>
+                                              b['institucion_id'].toString() ==
+                                              idInstitucion,
+                                        )
+                                        .length;
+
+                                    return DataRow(
+                                      cells: [
+                                        DataCell(
+                                          Text(
+                                            (index + 1).toString(),
+                                            style: const TextStyle(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.business,
+                                                size: 16,
+                                                color: Colors.blue,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                datos['nombre'] ?? 'Sin nombre',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        DataCell(Text(datos['ruc'] ?? 'S/N')),
+                                        DataCell(Text(ubicacionCompleta)),
+
+                                        // ✨ NUEVA CELDA: INDICADOR VISUAL DE BEACONS (BADGE)
+                                        DataCell(
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: cantidadBeacons > 0
+                                                  ? Colors.green.shade50
+                                                  : Colors.grey.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              border: Border.all(
+                                                color: cantidadBeacons > 0
+                                                    ? Colors.green.shade200
+                                                    : Colors.grey.shade300,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.bluetooth,
+                                                  size: 14,
+                                                  color: cantidadBeacons > 0
+                                                      ? Colors.green.shade700
+                                                      : Colors.grey,
+                                                ),
+                                                const SizedBox(width: 5),
+                                                Text(
+                                                  cantidadBeacons.toString(),
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: cantidadBeacons > 0
+                                                        ? Colors.green.shade700
+                                                        : Colors.grey,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+
+                                        DataCell(
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Tooltip(
+                                                message:
+                                                    'Ver Detalles Completos',
+                                                child: ElevatedButton.icon(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.blue.shade50,
+                                                    foregroundColor:
+                                                        Colors.blue.shade700,
+                                                    elevation: 0,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 8,
+                                                        ),
+                                                  ),
+                                                  icon: const Icon(
+                                                    Icons.visibility,
+                                                    size: 18,
+                                                  ),
+                                                  label: const Text('Ver info'),
+                                                  onPressed: () =>
+                                                      _mostrarDetalles(datos),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.edit_outlined,
+                                                  color: Colors.orange,
+                                                  size: 20,
+                                                ),
+                                                tooltip: 'Editar Institución',
+                                                onPressed: () =>
+                                                    _mostrarFormularioEditar(
+                                                      idInstitucion,
+                                                      datos,
+                                                    ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.delete_outline,
+                                                  color: Colors.red,
+                                                  size: 20,
+                                                ),
+                                                tooltip: 'Eliminar',
+                                                onPressed: () =>
+                                                    _confirmarEliminacion(
+                                                      idInstitucion,
+                                                      datos['nombre'] ?? '',
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }),
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      var documentos = snapshot.data!.where((datos) {
-                        String nombre = (datos['nombre'] ?? '')
-                            .toString()
-                            .toLowerCase();
-                        String ciudad = (datos['ciudad'] ?? '')
-                            .toString()
-                            .toLowerCase();
-                        return nombre.contains(_filtroBusqueda) ||
-                            ciudad.contains(_filtroBusqueda);
-                      }).toList();
-
-                      return DataTable(
-                        headingRowColor: WidgetStateProperty.resolveWith(
-                          (states) => Colors.grey.shade100,
+                            );
+                          },
                         ),
-                        columns: const [
-                          DataColumn(
-                            label: Text(
-                              '#',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Nombre',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Ubicación',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Contacto',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Teléfono',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Acciones',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                        rows: List.generate(documentos.length, (index) {
-                          var datos = documentos[index];
-                          String ubicacionCompleta =
-                              "${datos['ciudad'] ?? ''}, ${datos['provincia'] ?? ''}";
-
-                          return _filaInstitucion(
-                            index + 1,
-                            datos['id'].toString(),
-                            datos,
-                            datos['nombre'] ?? 'Sin nombre',
-                            ubicacionCompleta,
-                            datos['contacto'] ?? 'Sin contacto',
-                            datos['telefono'] ?? 'N/A',
-                          );
-                        }),
                       );
                     },
-                  ),
-                ),
+                  );
+                },
               ),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ================= COMPONENTES DE LA TABLA =================
-  DataRow _filaInstitucion(
-    int numero,
-    String idDocumento,
-    Map<String, dynamic> datos,
-    String nombre,
-    String ubicacion,
-    String contacto,
-    String telf,
-  ) {
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(numero.toString(), style: const TextStyle(color: Colors.grey)),
-        ),
-        DataCell(
-          Text(nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ),
-        DataCell(Text(ubicacion)),
-        DataCell(Text(contacto)),
-        DataCell(Text(telf)),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  color: Colors.blue,
-                  size: 20,
-                ),
-                tooltip: 'Editar Institución',
-                onPressed: () => _mostrarFormularioEditar(idDocumento, datos),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.red,
-                  size: 20,
-                ),
-                tooltip: 'Eliminar Institución',
-                onPressed: () => _confirmarEliminacion(idDocumento, nombre),
-              ),
-            ],
           ),
         ),
       ],
@@ -648,10 +1048,9 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
   Widget _construirBuscador() => TextField(
     controller: _buscadorController,
     decoration: const InputDecoration(
-      hintText: 'Buscar por nombre o ciudad...',
+      hintText: 'Buscar por nombre o RUC...',
       prefixIcon: Icon(Icons.search),
-      border: InputBorder
-          .none, // Quitamos el borde porque el contenedor ya lo tiene
+      border: InputBorder.none,
     ),
   );
 

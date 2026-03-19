@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
+// Importaciones de tus otras pantallas
+import 'package:panel_admin_itca/web/screens/beacons_admin.dart';
+import 'package:panel_admin_itca/web/screens/usuarios_admin.dart';
 import 'login_admin.dart';
+import 'inicio_admin.dart';
 import 'instituciones_admin.dart';
 
 class HomeAdmin extends StatefulWidget {
-  const HomeAdmin({super.key});
+  final String emailUsuario; // Recibido desde el Login
+
+  const HomeAdmin({super.key, required this.emailUsuario});
 
   @override
   State<HomeAdmin> createState() => _HomeAdminState();
@@ -15,9 +22,17 @@ class _HomeAdminState extends State<HomeAdmin> {
   int _indiceSeleccionado = 0;
   final supabase = Supabase.instance.client;
 
-  // Variables para mostrar en la interfaz
+  // Variables de perfil
   String _nombreReal = 'Cargando...';
-  String _rolReal = 'Administrador';
+  String _rolReal = 'Usuario';
+  String? _fotoUrl;
+  bool _subiendoFoto = false;
+
+  // Controladores para el diálogo de perfil
+  final TextEditingController _nombreCtrl = TextEditingController();
+  final TextEditingController _cedulaCtrl = TextEditingController();
+  final TextEditingController _telefonoCtrl = TextEditingController();
+  final TextEditingController _direccionCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -25,160 +40,221 @@ class _HomeAdminState extends State<HomeAdmin> {
     _cargarDatosUsuario();
   }
 
-  // ================= FUNCIÓN MAESTRA DE CARGA =================
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _cedulaCtrl.dispose();
+    _telefonoCtrl.dispose();
+    _direccionCtrl.dispose();
+    super.dispose();
+  }
+
+  // ================= CARGA DE DATOS DESDE SUPABASE =================
   Future<void> _cargarDatosUsuario() async {
     try {
-      // 1. En lugar de usar el ID raro, vamos a buscar por los metadatos o el correo.
-      // Como en tu tabla tienes la cédula, y probablemente sea tu "password" o identificador,
-      // la buscaremos directamente.
+      final correo = widget.emailUsuario.trim().toLowerCase();
 
-      final user = supabase.auth.currentUser;
-      if (user == null) return;
-
-      // Buscamos en la tabla usuarios donde la cédula coincida con el nombre de usuario (o correo)
-      // Ajuste: Si entras con correo, filtramos por una columna de correo.
-      // Si entras con cédula, filtramos por la columna cedula.
-
-      final respuesta = await supabase
+      final res = await supabase
           .from('usuarios')
-          .select('nombres, apellidos, rol')
-          .eq(
-            'cedula',
-            '1003807334',
-          ) // 👈 Lo he puesto fijo para probar, cámbialo si usas otros usuarios
+          .select()
+          .eq('email', correo)
           .maybeSingle();
 
-      if (mounted && respuesta != null) {
+      if (mounted && res != null) {
         setState(() {
-          String n = respuesta['nombres'] ?? '';
-          String a = respuesta['apellidos'] ?? '';
-          _nombreReal = '$n $a'.trim();
-          _rolReal = respuesta['rol'] ?? 'superadmin';
-        });
-      } else {
-        // Si no lo encuentra, mostramos algo por defecto para no dejarlo vacío
-        setState(() {
-          _nombreReal = "CARLA ESTEFANIA";
-          _rolReal = "superadmin";
+          _nombreReal = '${res['nombres'] ?? ''} ${res['apellidos'] ?? ''}'
+              .trim();
+          _rolReal = res['rol'] ?? 'administrador';
+          _fotoUrl = res['foto_url'];
+
+          // Llenar controladores para el modal (Sin Dirección)
+          _nombreCtrl.text = _nombreReal;
+          _cedulaCtrl.text = res['cedula']?.toString() ?? '';
+          _telefonoCtrl.text = res['telefono']?.toString() ?? '';
         });
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Error cargando usuario: $e");
+    }
+  }
+
+  // ================= GESTIÓN DE FOTO DE PERFIL BLINDADA =================
+  Future<void> _cambiarFotoPerfil() async {
+    final ImagePicker picker = ImagePicker();
+
+    // 1. Seleccionamos la imagen
+    final XFile? imagen = await picker.pickImage(source: ImageSource.gallery);
+    if (imagen == null) return;
+
+    setState(() => _subiendoFoto = true);
+
+    try {
+      // 2. Leemos los bytes (Única forma segura en Web)
+      final bytes = await imagen.readAsBytes();
+      final ext = imagen.name.split('.').last.toLowerCase();
+
+      // 3. Forzamos un nombre limpio sin espacios ni caracteres raros
+      final nombreArchivo =
+          'user_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final rutaStorage = 'perfiles/$nombreArchivo';
+
+      debugPrint("🚀 INICIANDO SUBIDA: $rutaStorage");
+
+      // 4. Subimos con la configuración explícita para Web
+      await supabase.storage
+          .from('perfiles_itca')
+          .uploadBinary(
+            rutaStorage,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: 'image/$ext',
+              upsert: true, // Si ya existe, lo reemplaza
+            ),
+          );
+
+      // 5. Obtenemos la URL
+      final imageUrl = supabase.storage
+          .from('perfiles_itca')
+          .getPublicUrl(rutaStorage);
+      debugPrint("✅ FOTO SUBIDA. URL: $imageUrl");
+
+      // 6. Actualizamos tu tabla de usuarios
+      await supabase
+          .from('usuarios')
+          .update({'foto_url': imageUrl})
+          .eq('email', widget.emailUsuario);
+
       setState(() {
-        _nombreReal = "CARLA PAILLACHO";
-        _rolReal = "superadmin";
+        _fotoUrl = imageUrl;
+        _subiendoFoto = false;
       });
+
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // Cierra el modal
+        _mostrarPerfilFlotante(); // Lo vuelve a abrir actualizado
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Foto actualizada'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on StorageException catch (se) {
+      // ERRORES ESPECÍFICOS DE SUPABASE STORAGE
+      setState(() => _subiendoFoto = false);
+      debugPrint("❌ ERROR DE SUPABASE STORAGE: ${se.message}");
+      debugPrint("❌ CÓDIGO DE ESTADO: ${se.statusCode}");
+      _mostrarAlertaError("Error de Storage", se.message);
+    } catch (e) {
+      // CUALQUIER OTRO ERROR
+      setState(() => _subiendoFoto = false);
+      debugPrint("❌ ERROR GENERAL: $e");
+      _mostrarAlertaError("Error de Aplicación", e.toString());
     }
   }
 
-  // Lista de pantallas principales
-  final List<Widget> _pantallas = [
-    const Center(
-      child: Text(
-        'Panel de Inicio',
-        style: TextStyle(fontSize: 24, color: Colors.grey),
+  // Pequeña función auxiliar para mostrar los errores en pantalla
+  void _mostrarAlertaError(String titulo, String mensaje) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo, style: const TextStyle(color: Colors.red)),
+        content: Text(mensaje),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Entendido"),
+          ),
+        ],
       ),
-    ),
-    const InstitucionesScreen(),
-    const Center(
-      child: Text(
-        'Módulo de Beacons',
-        style: TextStyle(fontSize: 24, color: Colors.grey),
-      ),
-    ),
-  ];
+    );
+  }
 
-  Future<void> _cerrarSesion() async {
-    await supabase.auth.signOut();
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginAdmin()),
-      );
+  // ================= ACTUALIZAR DATOS DE PERFIL =================
+  Future<void> _actualizarPerfil() async {
+    try {
+      await supabase
+          .from('usuarios')
+          .update({
+            'cedula': _cedulaCtrl.text,
+            'telefono': _telefonoCtrl.text,
+            // Hemos eliminado 'direccion' de este bloque
+          })
+          .eq('email', widget.emailUsuario);
+
+      if (mounted) {
+        Navigator.pop(context); // Cierra el modal
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Perfil actualizado'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _cargarDatosUsuario(); // Refresca los datos en pantalla
+      }
+    } catch (e) {
+      debugPrint("Error al actualizar: $e");
     }
   }
 
-  // ================= VENTANA FLOTANTE DE PERFIL =================
+  // ================= DIÁLOGO DE PERFIL DINÁMICO =================
   void _mostrarPerfilFlotante() {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          content: SizedBox(
-            width: 400,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Center(child: Text('Mi Perfil ITCA')),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Configuración de Perfil',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 25),
-                Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.blue.shade50,
-                      child: const Icon(
-                        Icons.person,
-                        size: 50,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      radius: 18,
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        onPressed: () =>
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('📸 Abriendo galería...'),
-                              ),
-                            ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 25),
-                TextFormField(
-                  initialValue: _nombreReal,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre Completo',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                  ),
+                _buildAvatarSeccion(),
+                const SizedBox(height: 20),
+
+                // Nombre Completo (Solo Lectura)
+                _inputPerfil(
+                  label: 'Nombre Completo',
+                  controller: _nombreCtrl,
+                  icon: Icons.person,
+                  readOnly: true,
                 ),
                 const SizedBox(height: 15),
-                TextFormField(
-                  initialValue: "1003807334",
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Cédula',
-                    prefixIcon: Icon(Icons.fingerprint),
-                  ),
+
+                // Cédula (Editable)
+                _inputPerfil(
+                  label: 'Cédula / ID',
+                  controller: _cedulaCtrl,
+                  icon: Icons.fingerprint,
                 ),
+                const SizedBox(height: 15),
+
+                // Teléfono (Editable)
+                _inputPerfil(
+                  label: 'Teléfono',
+                  controller: _telefonoCtrl,
+                  icon: Icons.phone,
+                ),
+
                 const SizedBox(height: 30),
+
+                // Botones
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Cerrar'),
+                        child: const Text('Cancelar'),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Guardar'),
+                        onPressed:
+                            _actualizarPerfil, // Llama a la función de guardado
+                        child: const Text('Guardar Cambios'),
                       ),
                     ),
                   ],
@@ -186,129 +262,201 @@ class _HomeAdminState extends State<HomeAdmin> {
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
+  Widget _buildAvatarSeccion() {
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        CircleAvatar(
+          radius: 50,
+          backgroundImage: _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
+          child: _fotoUrl == null ? const Icon(Icons.person, size: 50) : null,
+        ),
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: Colors.blue,
+          child: _subiendoFoto
+              ? const SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(
+                    Icons.camera_alt,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  onPressed: _cambiarFotoPerfil,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _inputPerfil({
+    required String label,
+    required TextEditingController controller,
+    required IconData icon,
+    bool readOnly = false,
+  }) {
+    return TextField(
+      controller: controller,
+      readOnly: readOnly,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        filled: readOnly,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  // ================= NAVEGACIÓN Y VISTAS =================
+  final List<Widget> _pantallas = [
+    const InicioScreen(),
+    const InstitucionesScreen(),
+    const BeaconsAdminScreen(),
+    const UsuariosAdminScreen(),
+    const Center(
+      child: Text('Módulo de Licencias 🚧', style: TextStyle(fontSize: 20)),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    bool esMovil = MediaQuery.of(context).size.width < 900;
+
     return Scaffold(
       appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
         title: const Text(
           'ITCA Access Admin',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          PopupMenuButton<int>(
-            offset: const Offset(0, 50),
-            onSelected: (v) =>
-                v == 1 ? _mostrarPerfilFlotante() : _cerrarSesion(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _nombreReal,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        _rolReal,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  const CircleAvatar(
-                    backgroundColor: Colors.white,
-                    radius: 18,
-                    child: Icon(Icons.person, size: 20),
-                  ),
-                ],
-              ),
+        backgroundColor: Colors.blue.shade800,
+        foregroundColor: Colors.white,
+        actions: [_buildUserMenu(), const SizedBox(width: 15)],
+      ),
+      drawer: esMovil ? Drawer(child: _menuLateral(true)) : null,
+      body: Row(
+        children: [
+          if (!esMovil)
+            Container(
+              width: 260,
+              color: Colors.white,
+              child: _menuLateral(false),
             ),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 1,
-                child: ListTile(
-                  leading: Icon(Icons.person_outline),
-                  title: Text('Mi Perfil'),
+
+          // ✨ AQUÍ ESTÁ EL CAMBIO: Agregamos el Padding alrededor de la pantalla
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(
+                24.0,
+              ), // 24 píxeles de margen en todos los lados
+              child: _pantallas[_indiceSeleccionado],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserMenu() {
+    return PopupMenuButton(
+      offset: const Offset(0, 50),
+      onSelected: (val) =>
+          val == 1 ? _mostrarPerfilFlotante() : _cerrarSesion(),
+      child: Row(
+        children: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _nombreReal,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 2,
-                child: ListTile(
-                  leading: Icon(Icons.logout, color: Colors.red),
-                  title: Text('Salir', style: TextStyle(color: Colors.red)),
-                ),
+              Text(
+                _rolReal.toUpperCase(),
+                style: const TextStyle(fontSize: 9, color: Colors.white70),
               ),
             ],
           ),
           const SizedBox(width: 10),
+          CircleAvatar(
+            backgroundImage: _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
+            child: _fotoUrl == null ? const Icon(Icons.person) : null,
+          ),
         ],
       ),
-      drawer: Drawer(
-        child: Column(
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              child: const Center(
-                child: Icon(
-                  Icons.admin_panel_settings,
-                  color: Colors.white,
-                  size: 60,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Inicio'),
-              onTap: () => setState(() {
-                _indiceSeleccionado = 0;
-                Navigator.pop(context);
-              }),
-            ),
-            ListTile(
-              leading: const Icon(Icons.business),
-              title: const Text('Instituciones'),
-              onTap: () => setState(() {
-                _indiceSeleccionado = 1;
-                Navigator.pop(context);
-              }),
-            ),
-            ListTile(
-              leading: const Icon(Icons.map),
-              title: const Text('Beacons'),
-              onTap: () => setState(() {
-                _indiceSeleccionado = 2;
-                Navigator.pop(context);
-              }),
-            ),
-          ],
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 1,
+          child: ListTile(
+            leading: Icon(Icons.person),
+            title: Text('Mi Perfil'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 2,
+          child: ListTile(
+            leading: Icon(Icons.logout, color: Colors.red),
+            title: Text('Salir'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _menuLateral(bool esDrawer) {
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        _opcion(Icons.home, 'Inicio', 0, esDrawer),
+        _opcion(Icons.business, 'Instituciones', 1, esDrawer),
+        _opcion(Icons.map, 'Beacons y Mapas', 2, esDrawer),
+        const Divider(),
+        _opcion(Icons.people, 'Usuarios', 3, esDrawer),
+        _opcion(Icons.vpn_key, 'Licencias', 4, esDrawer),
+      ],
+    );
+  }
+
+  Widget _opcion(IconData icono, String texto, int indice, bool esDrawer) {
+    bool sel = _indiceSeleccionado == indice;
+    return ListTile(
+      leading: Icon(icono, color: sel ? Colors.blue : Colors.grey),
+      title: Text(
+        texto,
+        style: TextStyle(
+          color: sel ? Colors.blue : Colors.black,
+          fontWeight: sel ? FontWeight.bold : FontWeight.normal,
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(
-          16.0,
-        ), // Puedes cambiar el 16.0 para más o menos margen
-        child: _pantallas[_indiceSeleccionado],
-      ),
+      selected: sel,
+      onTap: () {
+        setState(() => _indiceSeleccionado = indice);
+        if (esDrawer) Navigator.pop(context);
+      },
     );
+  }
+
+  void _cerrarSesion() async {
+    await supabase.auth.signOut();
+    if (mounted)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginAdmin()),
+      );
   }
 }

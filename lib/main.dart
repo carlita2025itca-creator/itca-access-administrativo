@@ -85,11 +85,11 @@ class _ControlSesionState extends State<ControlSesion> {
     // Le preguntamos a Supabase: "¿Hay alguien conectado ahora mismo?"
     final sesionActual = supabase.auth.currentSession;
 
-    // Si hay una sesión activa, mandamos al panel principal.
-    if (sesionActual != null) {
-      return const HomeAdmin();
+    // Si hay una sesión activa, mandamos al panel principal con su correo
+    if (sesionActual != null && sesionActual.user.email != null) {
+      return HomeAdmin(emailUsuario: sesionActual.user.email!);
     }
-    // Si no hay nadie logueado (o cerró sesión), lo mandamos a la pantalla de Login.
+    // Si no hay nadie logueado, lo mandamos al Login
     else {
       return const LoginAdmin();
     }
