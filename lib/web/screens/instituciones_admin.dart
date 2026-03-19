@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class InstitucionesScreen extends StatefulWidget {
-  const InstitucionesScreen({super.key});
+  final String userRole;
+  final String? userInstitutionId; // ✨ Agregamos el ID de su institución
+
+  const InstitucionesScreen({
+    super.key,
+    required this.userRole,
+    required this.userInstitutionId, // ✨ Lo pedimos obligatoriamente
+  });
 
   @override
   State<InstitucionesScreen> createState() => _InstitucionesScreenState();
@@ -765,10 +772,24 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(15),
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: supabase
-                    .from('instituciones')
-                    .stream(primaryKey: ['id'])
-                    .order('fecha_registro', ascending: false),
+                // ✨ AQUÍ ESTÁ LA MAGIA DEL FILTRO AISLADO
+                stream: (() {
+                  if (widget.userRole != 'superadmin' &&
+                      widget.userInstitutionId != null) {
+                    // Camino A: Si NO es superadmin, le traemos SOLO su institución
+                    return supabase
+                        .from('instituciones')
+                        .stream(primaryKey: ['id'])
+                        .eq('id', widget.userInstitutionId!)
+                        .order('nombre');
+                  } else {
+                    // Camino B: Si es superadmin, le traemos TODAS
+                    return supabase
+                        .from('instituciones')
+                        .stream(primaryKey: ['id'])
+                        .order('nombre');
+                  }
+                })(),
                 builder: (context, snapshotInst) {
                   if (snapshotInst.connectionState == ConnectionState.waiting)
                     return const Center(child: CircularProgressIndicator());
@@ -970,6 +991,7 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
+                                              // 👁️ Botón "Ver info" (SIEMPRE VISIBLE PARA TODOS)
                                               Tooltip(
                                                 message:
                                                     'Ver Detalles Completos',
@@ -995,33 +1017,55 @@ class _InstitucionesScreenState extends State<InstitucionesScreen> {
                                                       _mostrarDetalles(datos),
                                                 ),
                                               ),
-                                              const SizedBox(width: 10),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.edit_outlined,
-                                                  color: Colors.orange,
-                                                  size: 20,
+
+                                              // ✨ CONDICIÓN: Solo el superadmin ve lo que está aquí adentro
+                                              if (widget.userRole ==
+                                                  'superadmin') ...[
+                                                const SizedBox(width: 10),
+                                                // ✏️ Botón Editar
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.edit_outlined,
+                                                    color: Colors.orange,
+                                                    size: 20,
+                                                  ),
+                                                  tooltip: 'Editar Institución',
+                                                  onPressed: () =>
+                                                      _mostrarFormularioEditar(
+                                                        idInstitucion,
+                                                        datos,
+                                                      ),
                                                 ),
-                                                tooltip: 'Editar Institución',
-                                                onPressed: () =>
-                                                    _mostrarFormularioEditar(
-                                                      idInstitucion,
-                                                      datos,
-                                                    ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.delete_outline,
-                                                  color: Colors.red,
-                                                  size: 20,
+                                                // 🗑️ Botón Eliminar
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    color: Colors.red,
+                                                    size: 20,
+                                                  ),
+                                                  tooltip: 'Eliminar',
+                                                  onPressed: () =>
+                                                      _confirmarEliminacion(
+                                                        idInstitucion,
+                                                        datos['nombre'] ?? '',
+                                                      ),
                                                 ),
-                                                tooltip: 'Eliminar',
-                                                onPressed: () =>
-                                                    _confirmarEliminacion(
-                                                      idInstitucion,
-                                                      datos['nombre'] ?? '',
-                                                    ),
-                                              ),
+                                              ],
+
+                                              // 🔒 Candadito para los que no son superadmin (opcional, para que sepan que es de solo lectura)
+                                              if (widget.userRole !=
+                                                  'superadmin') ...[
+                                                const SizedBox(width: 10),
+                                                const Tooltip(
+                                                  message:
+                                                      'Solo lectura (Requiere Superadmin para editar)',
+                                                  child: Icon(
+                                                    Icons.lock_outline,
+                                                    color: Colors.grey,
+                                                    size: 18,
+                                                  ),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                         ),

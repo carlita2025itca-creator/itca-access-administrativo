@@ -8,6 +8,8 @@ import 'package:panel_admin_itca/web/screens/usuarios_admin.dart';
 import 'login_admin.dart';
 import 'inicio_admin.dart';
 import 'instituciones_admin.dart';
+import 'package:panel_admin_itca/web/screens/roles_permisos_admin.dart';
+// (Asegúrate de que la ruta coincida con cómo tienes las demás)
 
 class HomeAdmin extends StatefulWidget {
   final String emailUsuario; // Recibido desde el Login
@@ -27,6 +29,10 @@ class _HomeAdminState extends State<HomeAdmin> {
   String _rolReal = 'Usuario';
   String? _fotoUrl;
   bool _subiendoFoto = false;
+  // Variable para guardar los permisos dinámicos
+  Map<String, dynamic> _misPermisos = {};
+  String _miInstitucionId = '';
+  String? _idInstitucionReal;
 
   // Controladores para el diálogo de perfil
   final TextEditingController _nombreCtrl = TextEditingController();
@@ -62,19 +68,56 @@ class _HomeAdminState extends State<HomeAdmin> {
 
       if (mounted && res != null) {
         setState(() {
-          _nombreReal = '${res['nombres'] ?? ''} ${res['apellidos'] ?? ''}'
-              .trim();
-          _rolReal = res['rol'] ?? 'administrador';
+          // 1. Obtenemos los textos crudos de la base de datos
+          String nCompleto = res['nombres'] ?? '';
+          String aCompleto = res['apellidos'] ?? '';
+
+          // ✨ 2. EL TRUCO ESTÉTICO: Extraemos solo la primera palabra para el banner
+          String primerNombre = nCompleto.trim().isNotEmpty
+              ? nCompleto.trim().split(' ').first
+              : '';
+          String primerApellido = aCompleto.trim().isNotEmpty
+              ? aCompleto.trim().split(' ').first
+              : '';
+
+          // Nombre corto para el diseño principal ("Carla Paillacho")
+          _nombreReal = '$primerNombre $primerApellido'.trim();
+          _rolReal = res['rol'] ?? 'usuario';
           _fotoUrl = res['foto_url'];
 
-          // Llenar controladores para el modal (Sin Dirección)
-          _nombreCtrl.text = _nombreReal;
+          // 3. Llenamos los controladores con la info COMPLETA por si va a editar su perfil
+          _nombreCtrl.text = '$nCompleto $aCompleto'.trim();
           _cedulaCtrl.text = res['cedula']?.toString() ?? '';
           _telefonoCtrl.text = res['telefono']?.toString() ?? '';
+
+          // 4. Guardamos su institución para los filtros
+          _miInstitucionId = res['institucion_id']?.toString() ?? '';
         });
+
+        // ✨ MAGIA AQUÍ: Inmediatamente después de saber tu rol, descargamos tus permisos
+        await _cargarMisPermisos(_rolReal);
       }
     } catch (e) {
       debugPrint("Error cargando usuario: $e");
+    }
+  }
+
+  // ================= CARGA DE PERMISOS DINÁMICOS =================
+  Future<void> _cargarMisPermisos(String miRol) async {
+    try {
+      final resPermisos = await supabase
+          .from('roles_permisos')
+          .select()
+          .eq('rol', miRol)
+          .maybeSingle();
+
+      if (mounted && resPermisos != null) {
+        setState(() {
+          _misPermisos = resPermisos; // Guardamos los interruptores en memoria
+        });
+      }
+    } catch (e) {
+      debugPrint("Error cargando mis permisos: $e");
     }
   }
 
@@ -320,14 +363,26 @@ class _HomeAdminState extends State<HomeAdmin> {
   }
 
   // ================= NAVEGACIÓN Y VISTAS =================
-  final List<Widget> _pantallas = [
+  List<Widget> get _pantallas => [
     const InicioScreen(),
-    const InstitucionesScreen(),
-    const BeaconsAdminScreen(),
-    const UsuariosAdminScreen(),
-    const Center(
-      child: Text('Módulo de Licencias 🚧', style: TextStyle(fontSize: 20)),
+    InstitucionesScreen(
+      userRole: _rolReal,
+      userInstitutionId: _miInstitucionId, // ✨ Le pasamos el dato faltante
     ),
+    const BeaconsAdminScreen(),
+    // ✨ Actualiza esta línea para enviarle los datos:
+    UsuariosAdminScreen(
+      rolActual: _rolReal,
+      institucionIdActual: _miInstitucionId,
+    ),
+    const Center(
+      child: Text(
+        'Módulo de Licencias 🚧',
+        style: TextStyle(fontSize: 20, color: Colors.grey),
+      ),
+    ),
+    // ✨ AQUÍ AGREGAMOS LA NUEVA PANTALLA (Índice 5)
+    const RolesPermisosAdminScreen(),
   ];
 
   @override
@@ -419,15 +474,41 @@ class _HomeAdminState extends State<HomeAdmin> {
   }
 
   Widget _menuLateral(bool esDrawer) {
+    // Mini-función para saber si un interruptor está encendido (True)
+    bool tienePermiso(String permiso) => _misPermisos[permiso] == true;
+
     return Column(
       children: [
         const SizedBox(height: 20),
-        _opcion(Icons.home, 'Inicio', 0, esDrawer),
-        _opcion(Icons.business, 'Instituciones', 1, esDrawer),
-        _opcion(Icons.map, 'Beacons y Mapas', 2, esDrawer),
+
+        // El inicio siempre lo ven todos los que logran entrar al panel
+        _opcion(Icons.home_outlined, 'Inicio', 0, esDrawer),
+
+        // ✨ Los candados mágicos: Solo se dibujan si el interruptor está en TRUE
+        if (tienePermiso('ver_instituciones'))
+          _opcion(Icons.business_outlined, 'Instituciones', 1, esDrawer),
+
+        if (tienePermiso('ver_beacons'))
+          _opcion(Icons.map_outlined, 'Beacons y Mapas', 2, esDrawer),
+
         const Divider(),
-        _opcion(Icons.people, 'Usuarios', 3, esDrawer),
-        _opcion(Icons.vpn_key, 'Licencias', 4, esDrawer),
+
+        if (tienePermiso('ver_usuarios'))
+          _opcion(Icons.people_outline, 'Usuarios', 3, esDrawer),
+
+        if (_rolReal == 'superadmin') // Licencias temporalmente solo para ti
+          _opcion(Icons.vpn_key_outlined, 'Licencias', 4, esDrawer),
+
+        // ✨ La pantalla de configurar interruptores es EXCLUSIVA tuya
+        if (_rolReal == 'superadmin') ...[
+          const Divider(),
+          _opcion(
+            Icons.admin_panel_settings_outlined,
+            'Roles y Permisos',
+            5,
+            esDrawer,
+          ),
+        ],
       ],
     );
   }

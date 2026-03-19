@@ -3,9 +3,19 @@ import 'package:flutter/services.dart';
 import 'dart:convert'; // ✨ Para manejar los textos a encriptar
 import 'package:crypto/crypto.dart'; // ✨ El motor de encriptación SHA-256
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 class UsuariosAdminScreen extends StatefulWidget {
-  const UsuariosAdminScreen({super.key});
+  // ✨ Agregamos estas dos variables
+  final String rolActual;
+  final String institucionIdActual;
+
+  const UsuariosAdminScreen({
+    super.key,
+    required this.rolActual,
+    required this.institucionIdActual,
+  });
 
   @override
   State<UsuariosAdminScreen> createState() => _UsuariosAdminScreenState();
@@ -348,6 +358,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                               'accesibilidad': _accesibilidadSeleccionada,
                               'rol': _rolSeleccionado,
                               'institucion_id': _idInstitucionSeleccionada,
+                              'estado': 'aprobado',
                             };
 
                             try {
@@ -436,6 +447,87 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
           },
         );
       },
+    );
+  }
+
+  // ================= RESETEAR CONTRASEÑA =================
+  Future<void> _resetearContrasena(Map<String, dynamic> usuario) async {
+    final cedula = usuario['cedula']?.toString().trim() ?? '';
+    final rol = usuario['rol']?.toString().trim() ?? 'usuario';
+    final email = usuario['email'];
+
+    // Validación de seguridad
+    if (cedula.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Error: El usuario no tiene cédula registrada'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 1. Crear la contraseña plana (Ej: Rol "estudiante" y cédula "100" = "E100")
+    final letraRol = rol.isNotEmpty ? rol.substring(0, 1).toUpperCase() : 'U';
+    final nuevaPasswordPlana = '$letraRol$cedula';
+
+    // 2. Encriptar la nueva contraseña con SHA-256
+    var bytes = utf8.encode(nuevaPasswordPlana);
+    String passwordEncriptada = sha256.convert(bytes).toString();
+
+    try {
+      // 3. Actualizar en Supabase
+      await supabase
+          .from('usuarios')
+          .update({'password': passwordEncriptada})
+          .eq('email', email); // Usamos el email como identificador
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Clave reseteada con éxito. La nueva clave es: $nuevaPasswordPlana',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(
+              seconds: 6,
+            ), // Duración larga para que puedas leerla/copiarla
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error al resetear contraseña: $e");
+    }
+  }
+
+  void _mostrarDialogoResetPassword(Map<String, dynamic> usuario) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Resetear contraseña?'),
+        content: Text(
+          'La contraseña de ${usuario['nombres']} volverá a ser la inicial (Primera letra del rol + Cédula).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () {
+              Navigator.pop(context); // Cierra el diálogo
+              _resetearContrasena(
+                usuario,
+              ); // Llama a la función que hace el trabajo
+            },
+            child: const Text(
+              'Sí, Resetear',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -617,10 +709,24 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(15),
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: supabase
-                    .from('usuarios')
-                    .stream(primaryKey: ['cedula'])
-                    .order('nombres'),
+                // ✨ AQUÍ ESTÁ LA MAGIA DEL FILTRO
+                // ✨ AQUÍ ESTÁ LA MAGIA DEL FILTRO CORREGIDA
+                stream: (() {
+                  if (widget.rolActual != 'superadmin') {
+                    // Camino A: Si es administrador o guardia, filtramos por su institución
+                    return supabase
+                        .from('usuarios')
+                        .stream(primaryKey: ['cedula'])
+                        .eq('institucion_id', widget.institucionIdActual)
+                        .order('nombres');
+                  } else {
+                    // Camino B: Si eres superadmin, traemos a todos sin el filtro .eq()
+                    return supabase
+                        .from('usuarios')
+                        .stream(primaryKey: ['cedula'])
+                        .order('nombres');
+                  }
+                })(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting)
                     return const Center(child: CircularProgressIndicator());
@@ -871,6 +977,17 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                                   datos['cedula'],
                                                   nombreCompleto,
                                                 ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.lock_reset,
+                                              color: Colors.orange,
+                                            ),
+                                            tooltip: 'Resetear Contraseña',
+                                            onPressed: () =>
+                                                _mostrarDialogoResetPassword(
+                                                  datos,
+                                                ), // usuarioActual es el map del usuario de esa fila
                                           ),
                                         ],
                                       ),

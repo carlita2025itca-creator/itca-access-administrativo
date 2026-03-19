@@ -74,17 +74,51 @@ class _LoginAdminState extends State<LoginAdmin> {
         return;
       }
 
-      // 5. VALIDACIÓN DE PERMISOS (Solo Admins)
+      // ✨ 5. VALIDACIÓN DE PERMISOS DINÁMICA (Lee tu nueva tabla)
       final String rol = usuarioData['rol'] ?? 'usuario';
-      if (rol != 'superadmin' && rol != 'administrador') {
-        _mostrarMensaje(
-          '⛔ No tienes permisos para acceder al Panel Web.',
-          Colors.red.shade800,
-        );
-        setState(() => _estaCargando = false);
-        return;
-      }
 
+      if (rol != 'superadmin') {
+        // ✨ TRUCO: Convertimos espacios a guiones bajos (ej: "control de seguridad" -> "control_seguridad")
+        final String rolParaBuscar = rol.replaceAll(' ', '_');
+
+        // Buscamos usando .ilike() que ignora mayúsculas y minúsculas
+        final permisosData = await supabase
+            .from('roles_permisos')
+            .select()
+            .ilike('rol', rolParaBuscar)
+            .maybeSingle();
+
+        // Si el rol no existe en la tabla de permisos
+        if (permisosData == null) {
+          _mostrarMensaje(
+            '⛔ Tu rol ($rol) no está configurado en el sistema.',
+            Colors.red.shade800,
+          );
+          setState(() => _estaCargando = false);
+          return;
+        }
+
+        // Revisamos todas las columnas. Si encuentra al menos UN "true", lo deja pasar.
+        bool tieneAcceso = false;
+        permisosData.forEach((llave, valor) {
+          // Ignoramos las columnas de sistema y buscamos un true
+          if (llave != 'rol' &&
+              llave != 'id' &&
+              llave != 'created_at' &&
+              valor == true) {
+            tieneAcceso = true;
+          }
+        });
+
+        if (!tieneAcceso) {
+          _mostrarMensaje(
+            '⛔ Acceso denegado. No tienes ningún permiso activado en el Panel.',
+            Colors.red.shade800,
+          );
+          setState(() => _estaCargando = false);
+          return;
+        }
+      }
       // 6. ¡ACCESO CONCEDIDO!
       if (mounted) {
         Navigator.pushReplacement(
