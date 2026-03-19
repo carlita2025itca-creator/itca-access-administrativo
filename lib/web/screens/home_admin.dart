@@ -367,10 +367,11 @@ class _HomeAdminState extends State<HomeAdmin> {
     const InicioScreen(),
     InstitucionesScreen(
       userRole: _rolReal,
-      userInstitutionId: _miInstitucionId, // ✨ Le pasamos el dato faltante
+      userInstitutionId: _miInstitucionId,
     ),
-    const BeaconsAdminScreen(),
-    // ✨ Actualiza esta línea para enviarle los datos:
+
+    BeaconsAdminScreen(userRole: _rolReal, userInstitutionId: _miInstitucionId),
+
     UsuariosAdminScreen(
       rolActual: _rolReal,
       institucionIdActual: _miInstitucionId,
@@ -381,7 +382,7 @@ class _HomeAdminState extends State<HomeAdmin> {
         style: TextStyle(fontSize: 20, color: Colors.grey),
       ),
     ),
-    // ✨ AQUÍ AGREGAMOS LA NUEVA PANTALLA (Índice 5)
+
     const RolesPermisosAdminScreen(),
   ];
 

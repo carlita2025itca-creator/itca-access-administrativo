@@ -126,13 +126,13 @@ class _RolesPermisosAdminScreenState extends State<RolesPermisosAdminScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: ExpansionTile(
         initiallyExpanded:
-            nombreRol == 'CONTROL_SEGURIDAD' || nombreRol == 'ADMINISTRADOR',
+            nombreRol == 'control_seguridad' || nombreRol == 'ADMINISTRADOR',
         leading: Icon(
           nombreRol == 'SUPERADMIN'
               ? Icons.star
               : nombreRol == 'ADMINISTRADOR'
               ? Icons.manage_accounts
-              : nombreRol == 'CONTROL_SEGURIDAD'
+              : nombreRol == 'control_seguridad'
               ? Icons.security
               : Icons.person,
           color: Colors.blue.shade700,

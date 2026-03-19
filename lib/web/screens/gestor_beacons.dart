@@ -7,12 +7,14 @@ class GestorBeaconsScreen extends StatefulWidget {
   final String institucionId;
   final int nivel;
   final String urlImagen;
+  final String userRole; // ✨ 1. Agregamos el rol
 
   const GestorBeaconsScreen({
     super.key,
     required this.institucionId,
     required this.nivel,
     required this.urlImagen,
+    required this.userRole, // ✨ 2. Lo hacemos obligatorio
   });
 
   @override
@@ -61,6 +63,7 @@ class _GestorBeaconsScreenState extends State<GestorBeaconsScreen> {
     List<Map<String, dynamic>> beaconsActuales,
     List<Map<String, dynamic>> rutasActuales,
   ) {
+    if (widget.userRole != 'superadmin') return;
     final RenderBox cajaImagen =
         _mapaKey.currentContext!.findRenderObject() as RenderBox;
     final double tapX = detalles.localPosition.dx;
@@ -191,6 +194,7 @@ class _GestorBeaconsScreenState extends State<GestorBeaconsScreen> {
   }
 
   void _alTocarBeacon(Map<String, dynamic> beacon) {
+    if (widget.userRole != 'superadmin') return;
     if (_modoActual == ModoMapa.lugares) return;
 
     if (_modoActual == ModoMapa.rutas) {
@@ -1007,10 +1011,13 @@ class _GestorBeaconsScreenState extends State<GestorBeaconsScreen> {
             '${b['mac_address'] ?? 'Sin MAC'} • $rssiInfo',
             style: const TextStyle(fontSize: 12),
           ),
-          trailing: IconButton(
-            icon: const Icon(Icons.edit, size: 18),
-            onPressed: () => _mostrarDialogoOpcionesBeacon(b),
-          ),
+          // ✨ Si es superadmin muestra el lápiz, si no, no muestra nada (null)
+          trailing: widget.userRole == 'superadmin'
+              ? IconButton(
+                  icon: const Icon(Icons.edit, size: 18),
+                  onPressed: () => _mostrarDialogoOpcionesBeacon(b),
+                )
+              : null,
         );
       },
     );
@@ -1058,19 +1065,23 @@ class _GestorBeaconsScreenState extends State<GestorBeaconsScreen> {
             ),
           ),
           onTap: () => setState(() => _idRutaSeleccionada = r['id']),
-          trailing: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-            onPressed: () async {
-              await supabase.from('rutas').delete().eq('id', r['id']);
-              if (context.mounted)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('🗑️ Ruta eliminada'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-            },
-          ),
+          // ✨ MAGIA: Si es superadmin muestra el basurero, si no, lo oculta (null)
+          trailing: widget.userRole == 'superadmin'
+              ? IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                  onPressed: () async {
+                    await supabase.from('rutas').delete().eq('id', r['id']);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🗑️ Ruta eliminada'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                )
+              : null, // <- Aquí está la clave para ocultarlo
         );
       },
     );
@@ -1111,31 +1122,46 @@ class _GestorBeaconsScreenState extends State<GestorBeaconsScreen> {
                 'B1: ${l['rssi_beacon_1'] ?? '-'} | B2: ${l['rssi_beacon_2'] ?? '-'}',
                 style: const TextStyle(fontSize: 12),
               ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ✨ BOTÓN PARA EDITAR (LÁPIZ AZUL)
-                  IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
-                    onPressed: () =>
-                        _mostrarDialogoOpcionesLugar(l, beaconsActuales),
-                  ),
-                  // ✨ BOTÓN DE BASURERO
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                    onPressed: () async {
-                      await supabase.from('lugares').delete().eq('id', l['id']);
-                      if (context.mounted)
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('🗑️ Lugar eliminado'),
-                            backgroundColor: Colors.red,
+              // ✨ MAGIA: Si es superadmin muestra los botones, si no, los oculta (null)
+              trailing: widget.userRole == 'superadmin'
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // ✨ BOTÓN PARA EDITAR (LÁPIZ AZUL)
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit,
+                            color: Colors.blue,
+                            size: 18,
                           ),
-                        );
-                    },
-                  ),
-                ],
-              ),
+                          onPressed: () =>
+                              _mostrarDialogoOpcionesLugar(l, beaconsActuales),
+                        ),
+                        // ✨ BOTÓN DE BASURERO
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                          onPressed: () async {
+                            await supabase
+                                .from('lugares')
+                                .delete()
+                                .eq('id', l['id']);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('🗑️ Lugar eliminado'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    )
+                  : null, // <- Si NO es superadmin, no dibuja absolutamente nada
             );
           },
         );
@@ -1320,6 +1346,7 @@ class _GestorBeaconsScreenState extends State<GestorBeaconsScreen> {
                       offset: const Offset(0, 8),
                       child: GestureDetector(
                         onTap: () {
+                          if (widget.userRole != 'superadmin') return;
                           if (_modoActual == ModoMapa.lugares) {
                             _mostrarDialogoOpcionesLugar(ofi, beaconsActuales);
                           }

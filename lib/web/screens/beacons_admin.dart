@@ -5,7 +5,14 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
 
 class BeaconsAdminScreen extends StatefulWidget {
-  const BeaconsAdminScreen({super.key});
+  final String userRole;
+  final String? userInstitutionId; // ✨ 1. Presentamos la variable a Flutter
+
+  const BeaconsAdminScreen({
+    super.key,
+    required this.userRole,
+    required this.userInstitutionId, // ✨ 2. La exigimos como obligatoria
+  });
 
   @override
   State<BeaconsAdminScreen> createState() => _BeaconsAdminScreenState();
@@ -46,6 +53,7 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
         const SizedBox(height: 30),
 
         // ================= 2. SELECTOR DE INSTITUCIÓN =================
+        // ================= 2. SELECTOR DE INSTITUCIÓN =================
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -62,17 +70,50 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
                   const SizedBox(width: 15),
                   Expanded(
                     child: StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: supabase
-                          .from('instituciones')
-                          .stream(primaryKey: ['id'])
-                          .order('nombre', ascending: true),
+                      // ✨ MAGIA 1: El filtro inteligente para cargar solo las instituciones permitidas
+                      stream: (() {
+                        if (widget.userRole != 'superadmin' &&
+                            widget.userInstitutionId != null &&
+                            widget.userInstitutionId!.isNotEmpty) {
+                          // Camino A: Si NO es superadmin, le traemos SOLO su institución
+                          return supabase
+                              .from('instituciones')
+                              .stream(primaryKey: ['id'])
+                              .eq('id', widget.userInstitutionId!)
+                              .order('nombre', ascending: true);
+                        } else {
+                          // Camino B: Si es superadmin, le traemos TODAS
+                          return supabase
+                              .from('instituciones')
+                              .stream(primaryKey: ['id'])
+                              .order('nombre', ascending: true);
+                        }
+                      })(),
                       builder: (context, snapshot) {
-                        if (!snapshot.hasData)
+                        if (!snapshot.hasData) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
+                        }
 
                         final instituciones = snapshot.data!;
+
+                        // ✨ MAGIA 2: Si la lista solo tiene 1 colegio (porque no es superadmin),
+                        // lo seleccionamos automáticamente para que cargue el mapa de inmediato.
+                        if (instituciones.length == 1 &&
+                            _idInstitucionSeleccionada == null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _idInstitucionSeleccionada = instituciones
+                                    .first['id']
+                                    .toString();
+                                _datosInstitucionSeleccionada =
+                                    instituciones.first;
+                              });
+                            }
+                          });
+                        }
 
                         // Actualizar los datos locales en tiempo real si cambia en DB
                         if (_idInstitucionSeleccionada != null) {
@@ -108,15 +149,19 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
                               ),
                             );
                           }).toList(),
-                          onChanged: (nuevoId) {
-                            setState(() {
-                              _idInstitucionSeleccionada = nuevoId;
-                              _datosInstitucionSeleccionada = instituciones
-                                  .firstWhere(
-                                    (inst) => inst['id'].toString() == nuevoId,
-                                  );
-                            });
-                          },
+                          // ✨ MAGIA 3: Si no es superadmin, bloqueamos el botón para que sea "Solo lectura" (poniendo null)
+                          onChanged: widget.userRole == 'superadmin'
+                              ? (nuevoId) {
+                                  setState(() {
+                                    _idInstitucionSeleccionada = nuevoId;
+                                    _datosInstitucionSeleccionada =
+                                        instituciones.firstWhere(
+                                          (inst) =>
+                                              inst['id'].toString() == nuevoId,
+                                        );
+                                  });
+                                }
+                              : null,
                         );
                       },
                     ),
@@ -124,8 +169,9 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
                 ],
               ),
 
-              // ✨ NUEVO: CONTROLES PARA AGREGAR/QUITAR PISOS (Aparecen solo si hay una institución elegida)
-              if (_datosInstitucionSeleccionada != null) ...[
+              // ✨ CONTROLES PARA AGREGAR/QUITAR PISOS (Protegido solo para superadmin)
+              if (_datosInstitucionSeleccionada != null &&
+                  widget.userRole == 'superadmin') ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 15),
                   child: Divider(),
@@ -392,82 +438,86 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
                       ),
 
                       // ✨ NUEVO: MENÚ DE OPCIONES (Tres Puntitos)
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        onSelected: (valor) async {
-                          if (valor == 'reset') {
-                            bool conf = await _mostrarDialogoConfirmacion(
-                              '🔄 Resetear Nivel $nivelLogico',
-                              'Se borrarán todos los beacons, rutas y oficinas de este piso. El croquis NO se borrará.',
-                            );
-                            if (conf) {
-                              await _limpiarDatosNivel(
-                                nivelLogico,
-                                borrarCroquis: false,
+                      // ✨ MAGIA: Si NO eres superadmin, este botón simplemente no existe para ti
+                      if (widget.userRole == 'superadmin')
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (valor) async {
+                            if (valor == 'reset') {
+                              bool conf = await _mostrarDialogoConfirmacion(
+                                '🔄 Resetear Nivel $nivelLogico',
+                                'Se borrarán todos los beacons, rutas y oficinas de este piso. El croquis NO se borrará.',
                               );
-                              if (context.mounted)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      '✅ Nivel reseteado limpiecito',
+                              if (conf) {
+                                await _limpiarDatosNivel(
+                                  nivelLogico,
+                                  borrarCroquis: false,
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        '✅ Nivel reseteado limpiecito',
+                                      ),
+                                      backgroundColor: Colors.green,
                                     ),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
+                                  );
+                                }
+                              }
+                            } else if (valor == 'borrar_croquis') {
+                              bool conf = await _mostrarDialogoConfirmacion(
+                                '🖼️ Borrar Croquis',
+                                '¿Estás seguro de eliminar el plano de este nivel?',
+                              );
+                              if (conf) {
+                                final croquisId =
+                                    '${_idInstitucionSeleccionada}_$nivelLogico';
+                                await supabase
+                                    .from('croquis')
+                                    .delete()
+                                    .eq('id', croquisId);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('✅ Croquis eliminado'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              }
                             }
-                          } else if (valor == 'borrar_croquis') {
-                            bool conf = await _mostrarDialogoConfirmacion(
-                              '🖼️ Borrar Croquis',
-                              '¿Estás seguro de eliminar el plano de este nivel?',
-                            );
-                            if (conf) {
-                              final croquisId =
-                                  '${_idInstitucionSeleccionada}_$nivelLogico';
-                              await supabase
-                                  .from('croquis')
-                                  .delete()
-                                  .eq('id', croquisId);
-                              if (context.mounted)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('✅ Croquis eliminado'),
-                                    backgroundColor: Colors.green,
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'reset',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.refresh,
+                                    color: Colors.orange,
+                                    size: 20,
                                   ),
-                                );
-                            }
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'reset',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.refresh,
-                                  color: Colors.orange,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 10),
-                                Text('Resetear Puntos'),
-                              ],
+                                  SizedBox(width: 10),
+                                  Text('Resetear Puntos'),
+                                ],
+                              ),
                             ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'borrar_croquis',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.image_not_supported,
-                                  color: Colors.red,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 10),
-                                Text('Borrar Croquis'),
-                              ],
+                            const PopupMenuItem(
+                              value: 'borrar_croquis',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.image_not_supported,
+                                    color: Colors.red,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text('Borrar Croquis'),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: 15),
@@ -492,45 +542,61 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
                         runSpacing: 10,
                         children: [
                           // === BOTÓN 1: SUBIR ===
-                          Builder(
-                            builder: (context) {
-                              bool estePisoEstaSubiendo =
-                                  _nivelSubiendoImagen == nivelLogico;
-                              return ElevatedButton.icon(
-                                onPressed: _nivelSubiendoImagen != null
-                                    ? null
-                                    : () => _manejarSubidaCroquis(nivelLogico),
-                                icon: estePisoEstaSubiendo
-                                    ? const SizedBox(
-                                        width: 15,
-                                        height: 15,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.upload_file),
-                                label: Text(
-                                  estePisoEstaSubiendo
-                                      ? 'Subiendo...'
-                                      : (urlActual != null
-                                            ? 'Reemplazar Croquis'
-                                            : 'Subir Croquis'),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange.shade50,
-                                  foregroundColor: Colors.orange.shade800,
-                                  elevation: 0,
-                                ),
-                              );
-                            },
-                          ),
+                          // ✨ MAGIA: Capa de invisibilidad (Solo superadmin lo ve)
+                          if (widget.userRole == 'superadmin')
+                            Builder(
+                              builder: (context) {
+                                bool estePisoEstaSubiendo =
+                                    _nivelSubiendoImagen == nivelLogico;
+                                return ElevatedButton.icon(
+                                  onPressed: _nivelSubiendoImagen != null
+                                      ? null
+                                      : () =>
+                                            _manejarSubidaCroquis(nivelLogico),
+                                  icon: estePisoEstaSubiendo
+                                      ? const SizedBox(
+                                          width: 15,
+                                          height: 15,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.upload_file),
+                                  label: Text(
+                                    estePisoEstaSubiendo
+                                        ? 'Subiendo...'
+                                        : (urlActual != null
+                                              ? 'Reemplazar Croquis'
+                                              : 'Subir Croquis'),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange.shade50,
+                                    foregroundColor: Colors.orange.shade800,
+                                    elevation: 0,
+                                  ),
+                                );
+                              },
+                            ),
 
-                          // === BOTÓN 2: GESTIONAR ===
+                          // === BOTÓN 2: GESTIONAR O VER ===
                           ElevatedButton.icon(
                             onPressed: () =>
                                 _abrirGestorBeacons(nivelLogico, urlActual),
-                            icon: const Icon(Icons.bluetooth_connected),
-                            label: const Text('Gestionar Beacons'),
+
+                            // ✨ MAGIA: Si es superadmin muestra el Bluetooth, si no, muestra un Ojo
+                            icon: Icon(
+                              widget.userRole == 'superadmin'
+                                  ? Icons.bluetooth_connected
+                                  : Icons.visibility,
+                            ),
+
+                            // ✨ MAGIA: Cambia el texto según quién lo esté leyendo
+                            label: Text(
+                              widget.userRole == 'superadmin'
+                                  ? 'Gestionar Beacons'
+                                  : 'Ver Beacons',
+                            ),
+
                             style: ElevatedButton.styleFrom(
                               backgroundColor: urlActual != null
                                   ? Colors.blue.shade50
@@ -648,6 +714,7 @@ class _BeaconsAdminScreenState extends State<BeaconsAdminScreen> {
           institucionId: _idInstitucionSeleccionada!,
           nivel: nivelLogico,
           urlImagen: urlImagen,
+          userRole: widget.userRole, // ✨ LE PASAMOS EL ROL AQUÍ
         ),
       ),
     );

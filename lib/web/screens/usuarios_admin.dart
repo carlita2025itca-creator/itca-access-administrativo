@@ -43,7 +43,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
   final List<String> _rolesDisponibles = [
     'superadmin',
     'administrador',
-    'control de seguridad',
+    'control_seguridad',
     'usuario',
   ];
 
