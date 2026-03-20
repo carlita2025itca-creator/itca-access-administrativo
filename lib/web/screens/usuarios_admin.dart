@@ -32,10 +32,12 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
   final TextEditingController _apellidosController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
+  final TextEditingController _otradiscapacidadController =
+      TextEditingController();
 
   String? _rolSeleccionado = 'usuario';
   String? _idInstitucionSeleccionada;
-  String? _accesibilidadSeleccionada = 'Ninguna';
+  String? _discapacidadSeleccionada = 'Ninguna';
 
   String _filtroBusqueda = "";
   List<Map<String, dynamic>> _listaInstituciones = [];
@@ -47,10 +49,11 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
     'usuario',
   ];
 
-  final List<String> _opcionesAccesibilidad = [
+  final List<String> _opcionesdiscapacidad = [
     'Ninguna',
-    'Apoyo Visual',
-    'Apoyo Auditivo',
+    'Visual',
+    'Auditiva',
+    'Otra',
   ];
 
   @override
@@ -84,6 +87,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
     _apellidosController.dispose();
     _emailController.dispose();
     _edadController.dispose();
+    _otradiscapacidadController.dispose();
     super.dispose();
   }
 
@@ -95,7 +99,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
     _edadController.clear();
     _rolSeleccionado = 'usuario';
     _idInstitucionSeleccionada = null;
-    _accesibilidadSeleccionada = 'Ninguna';
+    _otradiscapacidadController.clear();
+    _discapacidadSeleccionada = 'Ninguna';
   }
 
   void _mostrarFormularioUsuario(
@@ -111,7 +116,14 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
       _edadController.text = datosActuales['edad']?.toString() ?? '';
       _rolSeleccionado = datosActuales['rol'] ?? 'usuario';
       _idInstitucionSeleccionada = datosActuales['institucion_id']?.toString();
-      _accesibilidadSeleccionada = datosActuales['accesibilidad'] ?? 'Ninguna';
+      String accDB = datosActuales['discapacidad'] ?? 'Ninguna';
+      if (_opcionesdiscapacidad.contains(accDB)) {
+        _discapacidadSeleccionada = accDB;
+        _otradiscapacidadController.clear();
+      } else {
+        _discapacidadSeleccionada = 'Otra';
+        _otradiscapacidadController.text = accDB;
+      }
     } else {
       _limpiarFormulario();
     }
@@ -246,27 +258,43 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                             Expanded(
                               flex: 2,
                               child: DropdownButtonFormField<String>(
-                                value: _accesibilidadSeleccionada,
+                                value: _discapacidadSeleccionada,
                                 decoration: const InputDecoration(
-                                  labelText: 'Ajustes de Accesibilidad',
+                                  // ✨ Cambiamos la pregunta aquí:
+                                  labelText: '¿Presenta alguna discapacidad?',
                                   prefixIcon: Icon(
                                     Icons.accessibility_new,
                                     color: Colors.blue,
                                   ),
                                 ),
-                                items: _opcionesAccesibilidad.map((acc) {
+                                items: _opcionesdiscapacidad.map((acc) {
                                   return DropdownMenuItem<String>(
                                     value: acc,
                                     child: Text(acc),
                                   );
                                 }).toList(),
                                 onChanged: (val) => setStateDialog(
-                                  () => _accesibilidadSeleccionada = val,
+                                  () => _discapacidadSeleccionada = val,
                                 ),
                               ),
                             ),
                           ],
                         ),
+
+                        if (_discapacidadSeleccionada == 'Otra') ...[
+                          const SizedBox(height: 15),
+                          TextFormField(
+                            controller: _otradiscapacidadController,
+                            decoration: const InputDecoration(
+                              labelText: 'Especifique la discapacidad',
+                              prefixIcon: Icon(Icons.edit_note),
+                            ),
+                            validator: (value) =>
+                                value == null || value.trim().isEmpty
+                                ? 'Por favor, especifique la discapacidad'
+                                : null,
+                          ),
+                        ],
                         const SizedBox(height: 15),
                         DropdownButtonFormField<String>(
                           value: _idInstitucionSeleccionada,
@@ -355,9 +383,14 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                   .trim()
                                   .toLowerCase(),
                               'edad': int.tryParse(_edadController.text.trim()),
-                              'accesibilidad': _accesibilidadSeleccionada,
+                              'discapacidad': _discapacidadSeleccionada,
                               'rol': _rolSeleccionado,
                               'institucion_id': _idInstitucionSeleccionada,
+                              'discapacidad': _discapacidadSeleccionada,
+                              'discapacidad_detalle':
+                                  _discapacidadSeleccionada == 'Otra'
+                                  ? _otradiscapacidadController.text.trim()
+                                  : null, // Si no es Otra, la base de datos lo deja vacío
                               'estado': 'aprobado',
                             };
 
@@ -824,8 +857,15 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                 String nombreCompleto =
                                     "${datos['nombres'] ?? ''} ${datos['apellidos'] ?? ''}";
                                 String rol = datos['rol'] ?? 'usuario';
-                                String accesibilidad =
-                                    datos['accesibilidad'] ?? 'Ninguna';
+                                String tipoDisc =
+                                    datos['discapacidad'] ?? 'Ninguna';
+                                String detalleDisc =
+                                    datos['discapacidad_detalle'] ?? '';
+
+                                // ✨ MAGIA: Si eligió "Otra", usamos el texto que escribió. Si no, usamos el tipo.
+                                String textoMostrar = tipoDisc == 'Otra'
+                                    ? detalleDisc
+                                    : tipoDisc;
 
                                 String nombreInstitucion = 'Sin Asignar';
                                 if (datos['institucion_id'] != null) {
@@ -877,12 +917,13 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                                           FontWeight.bold,
                                                     ),
                                                   ),
-                                                  if (accesibilidad !=
+                                                  if (tipoDisc !=
                                                       'Ninguna') ...[
                                                     const SizedBox(width: 5),
                                                     Tooltip(
+                                                      // ✨ Ahora mostrará "Discapacidad: Visual" o "Discapacidad: Silla de ruedas"
                                                       message:
-                                                          'Requerimiento: $accesibilidad',
+                                                          'Discapacidad: $textoMostrar',
                                                       child: const Icon(
                                                         Icons.accessibility_new,
                                                         size: 14,
