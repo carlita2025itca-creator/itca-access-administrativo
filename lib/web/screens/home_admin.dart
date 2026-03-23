@@ -10,6 +10,8 @@ import 'inicio_admin.dart';
 import 'instituciones_admin.dart';
 import 'package:panel_admin_itca/web/screens/roles_permisos_admin.dart';
 // (Asegúrate de que la ruta coincida con cómo tienes las demás)
+import 'package:url_launcher/url_launcher.dart';
+import 'package:panel_admin_itca/web/screens/registro_accesos_admin.dart';
 
 class HomeAdmin extends StatefulWidget {
   final String emailUsuario; // Recibido desde el Login
@@ -67,6 +69,7 @@ class _HomeAdminState extends State<HomeAdmin> {
           .maybeSingle();
 
       if (mounted && res != null) {
+        _verificarTerminosYCondiciones(res);
         setState(() {
           // 1. Obtenemos los textos crudos de la base de datos
           String nCompleto = res['nombres'] ?? '';
@@ -212,6 +215,222 @@ class _HomeAdminState extends State<HomeAdmin> {
         ],
       ),
     );
+  }
+
+  // ================= TÉRMINOS Y CONDICIONES =================
+  Future<void> _verificarTerminosYCondiciones(
+    Map<String, dynamic> datosUsuario,
+  ) async {
+    bool aceptoTerminos = datosUsuario['terminos_aceptados'] ?? false;
+
+    if (!aceptoTerminos) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await showDialog(
+          context: context,
+          barrierDismissible: false, // 🔒 No se puede cerrar tocando fuera
+          builder: (dialogContext) {
+            bool guardandoAceptacion = false;
+            // ✨ Variable para controlar el Checkbox
+            bool checkAceptado = false;
+
+            return StatefulBuilder(
+              builder: (context, setStateDialog) {
+                return AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.gavel, color: Colors.blue),
+                      SizedBox(width: 10),
+                      Text('Términos y Condiciones'),
+                    ],
+                  ),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Bienvenido a la plataforma del ITCA.\n\n'
+                          'Para continuar utilizando nuestros servicios, debes leer y aceptar nuestros Términos y Condiciones de uso y políticas de privacidad de datos.',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                        const SizedBox(height: 15),
+
+                        // ✨ Link al documento completo
+                        // ✨ Link al documento completo
+                        InkWell(
+                          onTap: () async {
+                            // 1. Pega aquí tu enlace real de Google Drive
+                            final Uri urlDrive = Uri.parse(
+                              'https://drive.google.com/file/d/1FOWdO75X8GoajU0BsB5IGJPoMfGL54j2/view?usp=drive_link',
+                            );
+
+                            // 2. El truco para que se abra APARTE
+                            try {
+                              if (!await launchUrl(
+                                urlDrive,
+                                mode: LaunchMode
+                                    .externalApplication, // Para el celular (abre el navegador nativo)
+                                webOnlyWindowName:
+                                    '_blank', // ✨ LA MAGIA WEB: Fuerza a abrir una pestaña nueva
+                              )) {
+                                throw Exception('No se pudo abrir el enlace');
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      '❌ No se pudo abrir el documento.',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text(
+                            '📄 Ver documento de términos y condiciones completo',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 25),
+
+                        // ✨ El Checkbox interactivo
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: checkAceptado
+                                ? Colors.blue.withOpacity(0.05)
+                                : Colors.grey.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: checkAceptado
+                                  ? Colors.blue
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Checkbox(
+                                value: checkAceptado,
+                                activeColor: Colors.blue,
+                                onChanged: (bool? valor) {
+                                  setStateDialog(
+                                    () => checkAceptado = valor ?? false,
+                                  );
+                                },
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setStateDialog(
+                                      () => checkAceptado = !checkAceptado,
+                                    );
+                                  },
+                                  child: const Text(
+                                    'He leído y acepto los términos y condiciones de la institución.',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: guardandoAceptacion
+                          ? null
+                          : () {
+                              Navigator.pop(dialogContext);
+                              _cerrarSesion();
+                            },
+                      child: const Text(
+                        'No acepto',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        // ✨ Efecto visual: si está deshabilitado se ve gris
+                        disabledBackgroundColor: Colors.grey.shade300,
+                      ),
+                      // ✨ LA MAGIA: El botón es 'null' (deshabilitado) si el check es falso o si está guardando
+                      onPressed: (!checkAceptado || guardandoAceptacion)
+                          ? null
+                          : () async {
+                              setStateDialog(() => guardandoAceptacion = true);
+
+                              try {
+                                await supabase
+                                    .from('usuarios')
+                                    .update({'terminos_aceptados': true})
+                                    .eq('id', datosUsuario['id']);
+
+                                if (mounted) {
+                                  Navigator.pop(dialogContext);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        '✅ Términos aceptados correctamente',
+                                      ),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setStateDialog(
+                                  () => guardandoAceptacion = false,
+                                );
+                                debugPrint("Error guardando T&C: $e");
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        '❌ Error al guardar. Revisa tu conexión.',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      child: guardandoAceptacion
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Aceptar y Continuar',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      });
+    }
   }
 
   // ================= ACTUALIZAR DATOS DE PERFIL =================
@@ -364,26 +583,36 @@ class _HomeAdminState extends State<HomeAdmin> {
 
   // ================= NAVEGACIÓN Y VISTAS =================
   List<Widget> get _pantallas => [
-    const InicioScreen(),
+    const InicioScreen(), // Índice 0
     InstitucionesScreen(
       userRole: _rolReal,
       userInstitutionId: _miInstitucionId,
-    ),
+    ), // Índice 1
 
-    BeaconsAdminScreen(userRole: _rolReal, userInstitutionId: _miInstitucionId),
+    BeaconsAdminScreen(
+      userRole: _rolReal,
+      userInstitutionId: _miInstitucionId,
+    ), // Índice 2
 
     UsuariosAdminScreen(
       rolActual: _rolReal,
       institucionIdActual: _miInstitucionId,
-    ),
+    ), // Índice 3
+
     const Center(
       child: Text(
         'Módulo de Licencias 🚧',
         style: TextStyle(fontSize: 20, color: Colors.grey),
       ),
-    ),
+    ), // Índice 4
 
-    const RolesPermisosAdminScreen(),
+    const RolesPermisosAdminScreen(), // Índice 5
+    // ✨ NUEVA PANTALLA: Índice 6
+    // ✨ ÍNDICE 6: La pantalla real de accesos
+    RegistroAccesosAdminScreen(
+      rolActual: _rolReal,
+      institucionIdActual: _miInstitucionId,
+    ),
   ];
 
   @override
@@ -496,7 +725,8 @@ class _HomeAdminState extends State<HomeAdmin> {
 
         if (tienePermiso('ver_usuarios'))
           _opcion(Icons.people_outline, 'Usuarios', 3, esDrawer),
-
+        if (_rolReal == 'superadmin' || tienePermiso('ver_usuarios'))
+          _opcion(Icons.history_edu, 'Registro de Accesos', 6, esDrawer),
         if (_rolReal == 'superadmin') // Licencias temporalmente solo para ti
           _opcion(Icons.vpn_key_outlined, 'Licencias', 4, esDrawer),
 

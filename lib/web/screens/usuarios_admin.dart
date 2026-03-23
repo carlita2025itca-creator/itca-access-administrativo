@@ -41,6 +41,9 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
 
   String _filtroBusqueda = "";
   List<Map<String, dynamic>> _listaInstituciones = [];
+  // ✨ VARIABLES DE SEXO ESTRICTAS
+  String? _sexoSeleccionado;
+  final List<String> _opcionesSexo = ['Masculino', 'Femenino'];
 
   final List<String> _rolesDisponibles = [
     'superadmin',
@@ -101,6 +104,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
     _idInstitucionSeleccionada = null;
     _otradiscapacidadController.clear();
     _discapacidadSeleccionada = 'Ninguna';
+    _sexoSeleccionado = null;
   }
 
   void _mostrarFormularioUsuario(
@@ -116,13 +120,22 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
       _edadController.text = datosActuales['edad']?.toString() ?? '';
       _rolSeleccionado = datosActuales['rol'] ?? 'usuario';
       _idInstitucionSeleccionada = datosActuales['institucion_id']?.toString();
-      String accDB = datosActuales['discapacidad'] ?? 'Ninguna';
-      if (_opcionesdiscapacidad.contains(accDB)) {
-        _discapacidadSeleccionada = accDB;
-        _otradiscapacidadController.clear();
+
+      // ✨ 1. AQUÍ AGREGAMOS EL SEXO FALTANTE
+      _sexoSeleccionado =
+          datosActuales['sexo']; // Se queda en null si no tenía, obligando a elegir
+
+      // ✨ 2. LA FORMA PROFESIONAL DE CARGAR LAS 2 COLUMNAS DE DISCAPACIDAD
+      String tipoDisc = datosActuales['discapacidad'] ?? 'Ninguna';
+      String detalleDisc = datosActuales['discapacidad_detalle'] ?? '';
+
+      _discapacidadSeleccionada = tipoDisc;
+
+      // Si la base de datos dice "Otra", llenamos la cajita de texto con el detalle. Si no, la limpiamos.
+      if (tipoDisc == 'Otra') {
+        _otradiscapacidadController.text = detalleDisc;
       } else {
-        _discapacidadSeleccionada = 'Otra';
-        _otradiscapacidadController.text = accDB;
+        _otradiscapacidadController.clear();
       }
     } else {
       _limpiarFormulario();
@@ -158,6 +171,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // --- 1. FILA NOMBRES Y APELLIDOS ---
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -181,6 +195,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                           ],
                         ),
                         const SizedBox(height: 15),
+
+                        // --- 2. FILA CÉDULA Y EMAIL ---
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -193,7 +209,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                   prefixIcon: Icon(Icons.fingerprint),
                                   counterText: '',
                                 ),
-                                readOnly: esEdicion,
+
                                 keyboardType: TextInputType.number,
                                 maxLength: 10,
                                 inputFormatters: [
@@ -231,6 +247,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                           ],
                         ),
                         const SizedBox(height: 15),
+
+                        // --- 3. FILA EDAD, SEXO Y DISCAPACIDAD ---
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -258,19 +276,41 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                             Expanded(
                               flex: 2,
                               child: DropdownButtonFormField<String>(
+                                value: _sexoSeleccionado,
+                                decoration: const InputDecoration(
+                                  labelText: 'Sexo',
+                                  prefixIcon: Icon(
+                                    Icons.wc,
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                                items: _opcionesSexo.map((s) {
+                                  return DropdownMenuItem<String>(
+                                    value: s,
+                                    child: Text(s),
+                                  );
+                                }).toList(),
+                                onChanged: (val) => setStateDialog(
+                                  () => _sexoSeleccionado = val,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
                                 value: _discapacidadSeleccionada,
                                 decoration: const InputDecoration(
-                                  // ✨ Cambiamos la pregunta aquí:
-                                  labelText: '¿Presenta alguna discapacidad?',
+                                  labelText: '¿Discapacidad?',
                                   prefixIcon: Icon(
                                     Icons.accessibility_new,
                                     color: Colors.blue,
                                   ),
                                 ),
-                                items: _opcionesdiscapacidad.map((acc) {
+                                items: _opcionesdiscapacidad.map((disc) {
                                   return DropdownMenuItem<String>(
-                                    value: acc,
-                                    child: Text(acc),
+                                    value: disc,
+                                    child: Text(disc),
                                   );
                                 }).toList(),
                                 onChanged: (val) => setStateDialog(
@@ -281,6 +321,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                           ],
                         ),
 
+                        // --- 4. CAMPO MÁGICO "OTRA DISCAPACIDAD" ---
                         if (_discapacidadSeleccionada == 'Otra') ...[
                           const SizedBox(height: 15),
                           TextFormField(
@@ -296,6 +337,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                           ),
                         ],
                         const SizedBox(height: 15),
+
+                        // --- 5. INSTITUCIÓN ---
                         DropdownButtonFormField<String>(
                           value: _idInstitucionSeleccionada,
                           decoration: const InputDecoration(
@@ -316,6 +359,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                               : null,
                         ),
                         const SizedBox(height: 15),
+
+                        // --- 6. ROL ---
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
@@ -370,37 +415,107 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                       ? null
                       : () async {
                           if (_formKey.currentState!.validate()) {
+                            // Asumiendo que ya tienes una variable para mostrar que está cargando
                             setStateDialog(() => guardando = true);
 
                             final cedulaLimpia = _cedulaController.text.trim();
-
-                            // Preparamos los datos base
-                            final datos = {
-                              'cedula': cedulaLimpia,
-                              'nombres': _nombresController.text.trim(),
-                              'apellidos': _apellidosController.text.trim(),
-                              'email': _emailController.text
-                                  .trim()
-                                  .toLowerCase(),
-                              'edad': int.tryParse(_edadController.text.trim()),
-                              'discapacidad': _discapacidadSeleccionada,
-                              'rol': _rolSeleccionado,
-                              'institucion_id': _idInstitucionSeleccionada,
-                              'discapacidad': _discapacidadSeleccionada,
-                              'discapacidad_detalle':
-                                  _discapacidadSeleccionada == 'Otra'
-                                  ? _otradiscapacidadController.text.trim()
-                                  : null, // Si no es Otra, la base de datos lo deja vacío
-                              'estado': 'aprobado',
-                            };
+                            final correoLimpio = _emailController.text
+                                .trim()
+                                .toLowerCase();
 
                             try {
+                              // ==========================================
+                              // ✨ 1. ESCUDO PROTECTOR: VALIDAR DUPLICADOS
+                              // ==========================================
+
+                              // A. Verificar Cédula
+                              var queryCedula = supabase
+                                  .from('usuarios')
+                                  .select('id')
+                                  .eq('cedula', cedulaLimpia);
+
+                              final resCedula = await queryCedula;
+
+                              // Verificamos si la cédula existe. Si existe, revisamos de quién es.
+                              if (resCedula.isNotEmpty) {
+                                bool cedulaEsDeOtro = true;
+
+                                // Si estamos editando y el ID encontrado es el nuestro, NO es un error
+                                if (esEdicion && datosActuales != null) {
+                                  if (resCedula.first['id'].toString() ==
+                                      datosActuales['id'].toString()) {
+                                    cedulaEsDeOtro = false;
+                                  }
+                                }
+
+                                if (cedulaEsDeOtro) {
+                                  _mostrarMensaje(
+                                    '❌ Esta cédula ya está registrada.',
+                                    Colors.red,
+                                  );
+                                  setStateDialog(() => guardando = false);
+                                  return;
+                                }
+                              }
+
+                              // B. Verificar Correo
+                              var queryEmail = supabase
+                                  .from('usuarios')
+                                  .select('id')
+                                  .eq('email', correoLimpio);
+
+                              final resEmail = await queryEmail;
+
+                              // Verificamos si el correo existe. Si existe, revisamos de quién es.
+                              if (resEmail.isNotEmpty) {
+                                bool emailEsDeOtro = true;
+
+                                // Si estamos editando y el ID encontrado es el nuestro, NO es un error
+                                if (esEdicion && datosActuales != null) {
+                                  if (resEmail.first['id'].toString() ==
+                                      datosActuales['id'].toString()) {
+                                    emailEsDeOtro = false;
+                                  }
+                                }
+
+                                if (emailEsDeOtro) {
+                                  _mostrarMensaje(
+                                    '❌ Este correo ya está en uso.',
+                                    Colors.red,
+                                  );
+                                  setStateDialog(() => guardando = false);
+                                  return;
+                                }
+                              }
+                              // ==========================================
+
+                              // ✨ 2. SI PASA EL ESCUDO, PREPARAMOS LOS DATOS
+                              final datos = {
+                                'cedula': cedulaLimpia,
+                                'nombres': _nombresController.text.trim(),
+                                'apellidos': _apellidosController.text.trim(),
+                                'email': correoLimpio,
+                                'edad': int.tryParse(
+                                  _edadController.text.trim(),
+                                ),
+                                'sexo': _sexoSeleccionado,
+                                'discapacidad': _discapacidadSeleccionada,
+                                'discapacidad_detalle':
+                                    _discapacidadSeleccionada == 'Otra'
+                                    ? _otradiscapacidadController.text.trim()
+                                    : null,
+                                'rol': _rolSeleccionado,
+                                'institucion_id': _idInstitucionSeleccionada,
+                                'estado': 'aprobado',
+                              };
+
                               if (esEdicion) {
                                 // Al editar, NO cambiamos la contraseña, solo los datos.
                                 await supabase
                                     .from('usuarios')
                                     .update(datos)
-                                    .eq('cedula', cedulaLimpia);
+                                    .eq('id', datosActuales!['id']);
+
                                 if (mounted) {
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -419,12 +534,10 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                     '$inicialRol$cedulaLimpia';
 
                                 // ✨ 2. LA ENCRIPTAMOS CON SHA-256
-                                var bytes = utf8.encode(
-                                  passwordGenerada,
-                                ); // Convertimos el texto a bytes
+                                var bytes = utf8.encode(passwordGenerada);
                                 String passwordEncriptada = sha256
                                     .convert(bytes)
-                                    .toString(); // Aplicamos el hash matemático
+                                    .toString();
 
                                 // ✨ 3. AGREGAMOS EL HASH A LOS DATOS A GUARDAR
                                 datos['password'] = passwordEncriptada;
@@ -564,10 +677,27 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
     );
   }
 
-  void _confirmarEliminacion(String cedula, String nombres) {
+  // ✨ ESTA ES LA FUNCIÓN QUE TE FALTABA:
+  void _mostrarMensaje(String texto, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          texto,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating, // Hace que el mensaje "flote"
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ✨ 1. AQUÍ: Cambiamos 'cedula' por 'idUsuario'
+  void _confirmarEliminacion(String idUsuario, String nombres) {
     showDialog(
       context: context,
-      builder: (context) {
+      // ✨ 2. Renombramos este context a dialogContext para no confundir a Flutter
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
@@ -576,7 +706,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
           content: Text('¿Eliminar permanentemente el acceso de "$nombres"?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () =>
+                  Navigator.pop(dialogContext), // Usa dialogContext
               child: const Text(
                 'Cancelar',
                 style: TextStyle(color: Colors.grey),
@@ -588,24 +719,30 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                 foregroundColor: Colors.white,
               ),
               onPressed: () async {
-                Navigator.pop(context);
+                // Cerramos el diálogo primero
+                Navigator.pop(dialogContext);
+
                 try {
-                  await supabase.from('usuarios').delete().eq('cedula', cedula);
-                  if (mounted)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('✅ $nombres eliminado'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                  // ✨ 3. Como ya pasamos idUsuario arriba, esto funcionará perfecto
+                  await supabase.from('usuarios').delete().eq('id', idUsuario);
+
+                  // ✨ 4. Forma correcta de manejar el context después de un await
+                  if (!mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ $nombres eliminado'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
                 } catch (e) {
-                  if (mounted)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('❌ Error al eliminar'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('❌ Error al eliminar'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
               },
               child: const Text('Sí, Eliminar'),
@@ -746,20 +883,23 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                 // ✨ AQUÍ ESTÁ LA MAGIA DEL FILTRO CORREGIDA
                 stream: (() {
                   if (widget.rolActual != 'superadmin') {
-                    // Camino A: Si es administrador o guardia, filtramos por su institución
                     return supabase
                         .from('usuarios')
-                        .stream(primaryKey: ['cedula'])
+                        .stream(
+                          primaryKey: ['id'],
+                        ) // ✅ Cambiar 'cedula' por 'id'
                         .eq('institucion_id', widget.institucionIdActual)
                         .order('nombres');
                   } else {
-                    // Camino B: Si eres superadmin, traemos a todos sin el filtro .eq()
                     return supabase
                         .from('usuarios')
-                        .stream(primaryKey: ['cedula'])
+                        .stream(
+                          primaryKey: ['id'],
+                        ) // ✅ Cambiar 'cedula' por 'id'
                         .order('nombres');
                   }
                 })(),
+
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting)
                     return const Center(child: CircularProgressIndicator());
@@ -934,7 +1074,7 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                                 ],
                                               ),
                                               Text(
-                                                '${datos['email'] ?? 'Sin email'} • ${datos['edad'] != null ? "${datos['edad']} años" : "Edad N/A"}',
+                                                '${datos['email'] ?? 'Sin email'} • ${datos['edad'] != null ? "${datos['edad']} años" : "Edad N/A"} • ${datos['sexo'] ?? 'Sexo N/A'}',
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   color: Colors.grey.shade600,
@@ -1013,11 +1153,11 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                                               size: 20,
                                             ),
                                             tooltip: 'Eliminar',
-                                            onPressed: () =>
-                                                _confirmarEliminacion(
-                                                  datos['cedula'],
-                                                  nombreCompleto,
-                                                ),
+                                            onPressed: () => _confirmarEliminacion(
+                                              datos['id']
+                                                  .toString(), // ✅ Pasamos el ID en lugar de la cédula
+                                              nombreCompleto,
+                                            ),
                                           ),
                                           IconButton(
                                             icon: const Icon(

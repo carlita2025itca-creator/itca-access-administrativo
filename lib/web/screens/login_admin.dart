@@ -200,16 +200,22 @@ class _LoginAdminState extends State<LoginAdmin> {
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  // ✨ 1. Tecla 'Enter' pasa al siguiente campo (opcional pero buena práctica)
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     labelText: 'Correo Electrónico',
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
+                  // ✨ 2. Si da Enter aquí, también intentamos iniciar sesión
+                  onSubmitted: (_) => _iniciarSesion(),
                 ),
                 const SizedBox(height: 20),
-
+                // --- CAMPO DE CONTRASEÑA ---
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscureText,
+                  // ✨ 3. Cambia el ícono del teclado a "Hecho" o "Go"
+                  textInputAction: TextInputAction.done,
                   decoration: InputDecoration(
                     labelText: 'Contraseña',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -221,7 +227,10 @@ class _LoginAdminState extends State<LoginAdmin> {
                           setState(() => _obscureText = !_obscureText),
                     ),
                   ),
+                  // ✨ 4. LA MAGIA: Al presionar Enter, llama a tu función de login
+                  onSubmitted: (_) => _iniciarSesion(),
                 ),
+                const SizedBox(height: 10),
                 const SizedBox(height: 10),
 
                 Align(
